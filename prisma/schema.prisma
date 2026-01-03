@@ -1,14 +1,265 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// ============================================
+// Auth.js 用モデル
+// ============================================
+
+model User {
+  id            String    @id @default(uuid(7))
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(PENDING)
+
+  accounts Account[]
+  sessions Session[]
+
+  // アプリケーション固有のリレーション
+  ownedEvents Event[]       @relation("EventOwner")
+  memberships EventMember[]
+  payments    Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum UserRole {
+  PENDING // 承認待ち
+  MEMBER  // 一般メンバー
+  ADMIN   // 管理者
+}
+
+model Account {
+  id                String  @id @default(uuid(7))
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(uuid(7))
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// アプリケーションモデル
+// ============================================
+
+model Event {
+  id               String   @id @default(uuid(7))
+  name             String   @db.VarChar(100)
+  startDate        DateTime
+  endDate          DateTime
+  gasPricePerLiter Int      @default(170) // ガソリン単価（円/L）
+
+  ownerId String
+  owner   User   @relation("EventOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  members       EventMember[]
+  payments      Payment[]
+  trips         Trip[]
+  rentalOptions RentalOption[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([startDate])
+}
+
+model EventMember {
+  id       String  @id @default(uuid(7))
+  eventId  String
+  userId   String
+  nickname String? @db.VarChar(50)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  vehicles             Vehicle[]
+  tripPassengers       TripPassenger[]
+  paymentBeneficiaries PaymentBeneficiary[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model Location {
+  id      String       @id @default(uuid(7))
+  name    String       @db.VarChar(100)
+  address String?      @db.VarChar(200)
+  lat     Float
+  lng     Float
+  type    LocationType
+
+  tripsFrom Trip[] @relation("TripFrom")
+  tripsTo   Trip[] @relation("TripTo")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum LocationType {
+  HOME     // 自宅（集合場所）
+  CAMPSITE // キャンプ場
+  STORE    // 店舗（買い出し）
+  OTHER    // その他
+}
+
+model Vehicle {
+  id             String      @id @default(uuid(7))
+  name           String      @db.VarChar(100)
+  type           VehicleType
+  ownerId        String?
+  capacity       Int         @db.SmallInt
+  fuelEfficiency Float?
+
+  owner EventMember? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  trips Trip[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+enum VehicleType {
+  OWNED    // 自家用車
+  RENTAL   // レンタカー
+  CARSHARE // カーシェア
+}
+
+model RentalOption {
+  id           String @id @default(uuid(7))
+  eventId      String
+  name         String @db.VarChar(100)
+  provider     String @db.VarChar(100)
+  baseFee      Int
+  distanceFee  Int?
+  insuranceFee Int?
+  capacity     Int    @db.SmallInt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventId])
+}
+
+model Trip {
+  id        String @id @default(uuid(7))
+  eventId   String
+  vehicleId String
+  fromId    String
+  toId      String
+  distance  Float? // km
+
+  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  vehicle Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  from    Location @relation("TripFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to      Location @relation("TripTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  passengers TripPassenger[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventId])
+  @@index([vehicleId])
+}
+
+model TripPassenger {
+  id       String @id @default(uuid(7))
+  tripId   String
+  memberId String
+
+  trip   Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  member EventMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, memberId])
+  @@index([tripId])
+  @@index([memberId])
+}
+
+model Payment {
+  id          String          @id @default(uuid(7))
+  eventId     String
+  payerId     String
+  amount      Int
+  description String          @db.VarChar(200)
+  category    PaymentCategory
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  payer User  @relation(fields: [payerId], references: [id], onDelete: Cascade)
+
+  beneficiaries PaymentBeneficiary[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventId])
+  @@index([payerId])
+  @@index([category])
+}
+
+enum PaymentCategory {
+  FOOD      // 食費
+  TRANSPORT // 交通費
+  LODGING   // 宿泊費
+  EQUIPMENT // 装備・道具
+  OTHER     // その他
+}
+
+model PaymentBeneficiary {
+  id        String @id @default(uuid(7))
+  paymentId String
+  memberId  String
+
+  payment Payment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  member  EventMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentId, memberId])
+  @@index([paymentId])
+  @@index([memberId])
 }
