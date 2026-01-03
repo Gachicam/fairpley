@@ -2,19 +2,20 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getMyEvents } from "@/data/event";
 
 export default async function DashboardPage(): Promise<React.ReactElement> {
   const session = await auth();
+  const rawEvents = await getMyEvents();
 
-  // TODO: getMyEvents() を実装したら置き換え
-  const events: Array<{
-    id: string;
-    name: string;
-    startDate: Date;
-    endDate: Date;
-    memberCount: number;
-    paymentCount: number;
-  }> = [];
+  const events = rawEvents.map((event) => ({
+    id: event.id,
+    name: event.name,
+    startDate: event.startDate,
+    endDate: event.endDate,
+    memberCount: event.members.length,
+    paymentCount: event._count.payments,
+  }));
 
   return (
     <div className="container mx-auto px-4 py-8">
