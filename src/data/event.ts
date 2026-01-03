@@ -175,3 +175,40 @@ export async function getEventPayments(eventId: string): Promise<PaymentWithDeta
     orderBy: { createdAt: "desc" },
   });
 }
+
+/**
+ * 単一の支払いを取得
+ */
+export async function getPaymentById(paymentId: string): Promise<PaymentWithDetails | null> {
+  const session = await auth();
+  if (!session) {
+    return null;
+  }
+
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      payer: true,
+      beneficiaries: {
+        include: { member: { include: { user: true } } },
+      },
+    },
+  });
+
+  if (!payment) {
+    return null;
+  }
+
+  // アクセス権チェック
+  const isMember = await prisma.eventMember.findUnique({
+    where: {
+      eventId_userId: { eventId: payment.eventId, userId: session.user.id },
+    },
+  });
+
+  if (!isMember) {
+    return null;
+  }
+
+  return payment;
+}
