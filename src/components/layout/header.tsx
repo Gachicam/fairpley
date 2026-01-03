@@ -46,7 +46,7 @@ export function Header({ session }: HeaderProps): React.ReactElement {
               {user.role === "ADMIN" && (
                 <>
                   <DropdownMenuItem asChild>
-                    <Link href="/admin/users">ユーザー管理</Link>
+                    <Link href="/admin">管理者ページ</Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                 </>
