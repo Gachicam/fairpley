@@ -33,7 +33,7 @@ export function Header({ session }: HeaderProps): React.ReactElement {
               <Button variant="ghost" className="flex items-center gap-2">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src={user.image ?? undefined} alt={user.name ?? "User"} />
-                  <AvatarFallback>{user.name?.charAt(0) ?? "U"}</AvatarFallback>
+                  <AvatarFallback>{user.name ? Array.from(user.name)[0] : "U"}</AvatarFallback>
                 </Avatar>
                 <span className="hidden sm:inline">{user.name}</span>
               </Button>
