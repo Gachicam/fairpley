@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { EventSettings } from "@/components/event/event-settings";
 import { MemberList } from "@/components/event/member-list";
 import { AddMemberForm } from "@/components/event/add-member-form";
+import { TripListCompact } from "@/components/trip/trip-list-compact";
 
 interface PageProps {
   params: Promise<{ eventId: string }>;
@@ -102,32 +103,7 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
               </Button>
             </CardHeader>
             <CardContent>
-              {event.trips.length > 0 ? (
-                <div className="divide-y">
-                  {event.trips.slice(0, 5).map((trip) => (
-                    <div key={trip.id} className="py-3">
-                      <p className="font-medium">
-                        {trip.from.name} → {trip.to.name}
-                      </p>
-                      <p className="text-muted-foreground text-sm">
-                        {trip.vehicle.name} ({trip.passengers.length}人)
-                        {trip.distance !== null && ` - ${trip.distance.toFixed(1)}km`}
-                      </p>
-                    </div>
-                  ))}
-                  {event.trips.length > 5 && (
-                    <div className="pt-3 text-center">
-                      <Button variant="link" asChild>
-                        <Link href={`/events/${eventId}/trips`}>すべての移動を表示</Link>
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-muted-foreground py-8 text-center">
-                  まだ移動が記録されていません
-                </p>
-              )}
+              <TripListCompact trips={event.trips} eventId={eventId} />
             </CardContent>
           </Card>
         </div>
@@ -148,6 +124,22 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
                 isOwner={isOwner}
               />
               <AddMemberForm eventId={eventId} />
+            </CardContent>
+          </Card>
+
+          {/* 管理 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>管理</CardTitle>
+              <CardDescription>車両・場所の管理</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button variant="outline" className="w-full" asChild>
+                <Link href={`/events/${eventId}/vehicles`}>車両管理</Link>
+              </Button>
+              <Button variant="outline" className="w-full" asChild>
+                <Link href={`/events/${eventId}/locations`}>場所管理</Link>
+              </Button>
             </CardContent>
           </Card>
 

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMyEvents } from "@/data/event";
+import { Car, MapPin } from "lucide-react";
 
 export default async function DashboardPage(): Promise<React.ReactElement> {
   const session = await auth();
@@ -57,6 +58,40 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
           </CardContent>
         </Card>
       )}
+
+      {/* マスターデータ管理 */}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>マスターデータ管理</CardTitle>
+          <CardDescription>全イベント共通で使用するデータを管理します</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Link
+            href="/locations"
+            className="hover:bg-muted flex items-center gap-3 rounded-lg border p-4 transition-colors"
+          >
+            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-full">
+              <MapPin className="text-primary h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-medium">場所管理</p>
+              <p className="text-muted-foreground text-sm">キャンプ場、集合場所などを登録・編集</p>
+            </div>
+          </Link>
+          <Link
+            href="/vehicles"
+            className="hover:bg-muted flex items-center gap-3 rounded-lg border p-4 transition-colors"
+          >
+            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-full">
+              <Car className="text-primary h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-medium">車両管理</p>
+              <p className="text-muted-foreground text-sm">自家用車、レンタカーなどを登録・編集</p>
+            </div>
+          </Link>
+        </CardContent>
+      </Card>
 
       {/* デバッグ情報 */}
       {process.env.NODE_ENV === "development" && session && (
