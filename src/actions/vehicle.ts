@@ -2,7 +2,12 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { createVehicleSchema, updateVehicleSchema } from "@/lib/schemas/vehicle";
+import {
+  createVehicleSchema,
+  updateVehicleSchema,
+  createGlobalVehicleSchema,
+  updateGlobalVehicleSchema,
+} from "@/lib/schemas/vehicle";
 import { revalidatePath } from "next/cache";
 
 interface ActionResult {
@@ -149,4 +154,124 @@ export async function deleteVehicle(eventId: string, vehicleId: string): Promise
   });
 
   revalidatePath(`/events/${eventId}`);
+}
+
+// ========================================
+// グローバル車両管理（イベント非依存）
+// ========================================
+
+/**
+ * 全車両を取得
+ */
+export async function getVehicles(): Promise<
+  Array<{
+    id: string;
+    name: string;
+    type: string;
+    capacity: number;
+    fuelEfficiency: number | null;
+    ownerId: string | null;
+  }>
+> {
+  const session = await auth();
+  if (!session) {
+    return [];
+  }
+
+  return prisma.vehicle.findMany({
+    orderBy: { name: "asc" },
+  });
+}
+
+/**
+ * グローバル車両を作成
+ */
+export async function createGlobalVehicle(formData: FormData): Promise<ActionResult> {
+  const session = await auth();
+  if (!session) {
+    throw new Error("認証が必要です");
+  }
+
+  const capacityRaw = formData.get("capacity");
+  const fuelEfficiencyRaw = formData.get("fuelEfficiency");
+
+  const validatedFields = createGlobalVehicleSchema.safeParse({
+    name: formData.get("name"),
+    type: formData.get("type"),
+    capacity: typeof capacityRaw === "string" ? parseInt(capacityRaw, 10) : 4,
+    fuelEfficiency:
+      typeof fuelEfficiencyRaw === "string" && fuelEfficiencyRaw
+        ? parseFloat(fuelEfficiencyRaw)
+        : undefined,
+  });
+
+  if (!validatedFields.success) {
+    return { error: validatedFields.error.flatten().fieldErrors };
+  }
+
+  await prisma.vehicle.create({
+    data: validatedFields.data,
+  });
+
+  return {};
+}
+
+/**
+ * グローバル車両を更新
+ */
+export async function updateGlobalVehicle(formData: FormData): Promise<ActionResult> {
+  const session = await auth();
+  if (!session) {
+    throw new Error("認証が必要です");
+  }
+
+  const capacityRaw = formData.get("capacity");
+  const fuelEfficiencyRaw = formData.get("fuelEfficiency");
+
+  const validatedFields = updateGlobalVehicleSchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    type: formData.get("type"),
+    capacity: typeof capacityRaw === "string" ? parseInt(capacityRaw, 10) : 4,
+    fuelEfficiency:
+      typeof fuelEfficiencyRaw === "string" && fuelEfficiencyRaw
+        ? parseFloat(fuelEfficiencyRaw)
+        : undefined,
+  });
+
+  if (!validatedFields.success) {
+    return { error: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { id, ...data } = validatedFields.data;
+
+  await prisma.vehicle.update({
+    where: { id },
+    data,
+  });
+
+  return {};
+}
+
+/**
+ * グローバル車両を削除
+ */
+export async function deleteGlobalVehicle(vehicleId: string): Promise<void> {
+  const session = await auth();
+  if (!session) {
+    throw new Error("認証が必要です");
+  }
+
+  // 使用中の移動記録があるかチェック
+  const tripCount = await prisma.trip.count({
+    where: { vehicleId },
+  });
+
+  if (tripCount > 0) {
+    throw new Error("この車両は移動記録で使用されているため削除できません");
+  }
+
+  await prisma.vehicle.delete({
+    where: { id: vehicleId },
+  });
 }
