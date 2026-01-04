@@ -1,36 +1,125 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fairpley
 
-## Getting Started
+キャンプなどのグループイベントにおける費用をシャープレイ値で公平に分担するアプリケーション。
 
-First, run the development server:
+**本番URL:** https://fairpley.gachicam.com
+
+## 機能
+
+- イベント管理（作成・編集・削除）
+- メンバー管理
+- 支払い記録
+- 移動記録（車両・場所管理）
+- シャープレイ値による清算計算
+- Discord認証
+
+## 技術スタック
+
+- Next.js 16 (App Router)
+- TypeScript
+- Prisma 7 + PostgreSQL
+- Auth.js v5 (Discord OAuth)
+- Tailwind CSS + shadcn/ui
+- Google Maps API
+
+## セットアップ
+
+### 1. 依存関係のインストール
+
+```bash
+npm install
+```
+
+### 2. 環境変数の設定
+
+`.env` ファイルを作成:
+
+```env
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5433/fairpley"
+
+# Auth.js
+AUTH_SECRET="your-auth-secret"
+
+# Discord OAuth
+DISCORD_CLIENT_ID="your-discord-client-id"
+DISCORD_CLIENT_SECRET="your-discord-client-secret"
+
+# Google Maps API（任意）
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="your-google-maps-api-key"
+```
+
+### 3. データベースのセットアップ
+
+```bash
+# Docker で PostgreSQL を起動
+docker compose up -d
+
+# マイグレーション実行
+npx prisma migrate dev
+```
+
+### 4. 開発サーバーの起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000 でアクセス可能。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Google Maps API 設定
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+場所登録で地図検索・選択機能を使用する場合、Google Maps API の設定が必要です。
 
-## Learn More
+### 有効化が必要なAPI
 
-To learn more about Next.js, take a look at the following resources:
+[Google Cloud Console](https://console.cloud.google.com/) で以下のAPIを有効化:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| API名 | 用途 |
+|-------|------|
+| Maps JavaScript API | 地図の表示 |
+| Places API (New) | 場所検索・オートコンプリート |
+| Geocoding API | 住所から座標を取得 |
+| Routes API | ルート・距離計算（将来機能） |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### APIキーの作成と制限
 
-## Deploy on Vercel
+1. 「認証情報」→「認証情報を作成」→「APIキー」
+2. 作成したAPIキーをクリックして制限を設定:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**アプリケーションの制限（HTTPリファラー）:**
+```
+localhost:3000/*
+fairpley.gachicam.com/*
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**APIの制限:**
+- Maps JavaScript API
+- Places API (New)
+- Geocoding API
+- Routes API
+
+### 料金
+
+各APIに月10,000リクエストまでの無料枠があります。
+小〜中規模の利用であれば無料枠内で収まります。
+
+詳細: [Google Maps Platform Pricing](https://mapsplatform.google.com/pricing/)
+
+## デプロイ
+
+### SST (AWS)
+
+```bash
+# 開発環境
+npx sst dev
+
+# 本番デプロイ
+npx sst deploy --stage production
+```
+
+環境変数は `sst.config.ts` または AWS Systems Manager Parameter Store で設定。
+
+## ライセンス
+
+MIT License
