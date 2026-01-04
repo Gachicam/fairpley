@@ -33,22 +33,6 @@ export type EventWithFullDetails = Prisma.EventGetPayload<{
         beneficiaries: true;
       };
     };
-    trips: {
-      include: {
-        vehicle: true;
-        from: true;
-        to: true;
-        passengers: {
-          include: {
-            member: {
-              include: {
-                user: true;
-              };
-            };
-          };
-        };
-      };
-    };
   };
 }>;
 
@@ -120,22 +104,6 @@ export async function getEventById(eventId: string): Promise<EventWithFullDetail
           beneficiaries: true,
         },
         orderBy: { createdAt: "desc" },
-      },
-      trips: {
-        include: {
-          vehicle: true,
-          from: true,
-          to: true,
-          passengers: {
-            include: {
-              member: {
-                include: {
-                  user: true,
-                },
-              },
-            },
-          },
-        },
       },
     },
   });
@@ -221,68 +189,6 @@ export async function getPaymentById(paymentId: string): Promise<PaymentWithDeta
   }
 
   return payment;
-}
-
-export type TripWithDetails = Prisma.TripGetPayload<{
-  include: {
-    vehicle: true;
-    from: true;
-    to: true;
-    passengers: {
-      include: {
-        member: {
-          include: {
-            user: true;
-          };
-        };
-      };
-    };
-  };
-}>;
-
-/**
- * 単一の移動記録を取得
- */
-export async function getTripById(tripId: string): Promise<TripWithDetails | null> {
-  const session = await auth();
-  if (!session) {
-    return null;
-  }
-
-  const trip = await prisma.trip.findUnique({
-    where: { id: tripId },
-    include: {
-      vehicle: true,
-      from: true,
-      to: true,
-      passengers: {
-        include: {
-          member: {
-            include: {
-              user: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!trip) {
-    return null;
-  }
-
-  // アクセス権チェック
-  const isMember = await prisma.eventMember.findUnique({
-    where: {
-      eventId_userId: { eventId: trip.eventId, userId: session.user.id },
-    },
-  });
-
-  if (!isMember) {
-    return null;
-  }
-
-  return trip;
 }
 
 export type VehicleWithOwner = Prisma.VehicleGetPayload<{

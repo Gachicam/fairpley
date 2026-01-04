@@ -93,7 +93,6 @@ model Event {
 
   members       EventMember[]
   payments      Payment[]
-  trips         Trip[]
   rentalOptions RentalOption[]
 
   createdAt DateTime @default(now())
@@ -113,7 +112,6 @@ model EventMember {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   vehicles             Vehicle[]
-  tripPassengers       TripPassenger[]
   paymentBeneficiaries PaymentBeneficiary[]
 
   createdAt DateTime @default(now())
@@ -130,10 +128,6 @@ model Location {
   lat     Float
   lng     Float
   type    LocationType
-
-  tripsFrom     Trip[]         @relation("TripFrom")
-  tripsTo       Trip[]         @relation("TripTo")
-  tripWaypoints TripWaypoint[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -155,8 +149,6 @@ model Vehicle {
   fuelEfficiency Float?
 
   owner EventMember? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-
-  trips Trip[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -186,56 +178,6 @@ model RentalOption {
   updatedAt DateTime @updatedAt
 
   @@index([eventId])
-}
-
-model Trip {
-  id        String @id @default(uuid(7))
-  eventId   String
-  vehicleId String
-  fromId    String
-  toId      String
-  distance  Float? // km
-
-  event   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  vehicle Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  from    Location @relation("TripFrom", fields: [fromId], references: [id], onDelete: Cascade)
-  to      Location @relation("TripTo", fields: [toId], references: [id], onDelete: Cascade)
-
-  passengers TripPassenger[]
-  waypoints  TripWaypoint[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([eventId])
-  @@index([vehicleId])
-}
-
-model TripPassenger {
-  id       String @id @default(uuid(7))
-  tripId   String
-  memberId String
-
-  trip   Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  member EventMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-
-  @@unique([tripId, memberId])
-  @@index([tripId])
-  @@index([memberId])
-}
-
-model TripWaypoint {
-  id         String @id @default(uuid(7))
-  tripId     String
-  locationId String
-  order      Int // 経由地の順番（0から始まる）
-
-  trip     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-
-  @@unique([tripId, order])
-  @@index([tripId])
-  @@index([locationId])
 }
 
 model Payment {

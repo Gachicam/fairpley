@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { EventSettings } from "@/components/event/event-settings";
 import { MemberList } from "@/components/event/member-list";
 import { AddMemberForm } from "@/components/event/add-member-form";
-import { TripListCompact } from "@/components/trip/trip-list-compact";
 
 interface PageProps {
   params: Promise<{ eventId: string }>;
@@ -88,22 +87,6 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
                   まだ支払いが記録されていません
                 </p>
               )}
-            </CardContent>
-          </Card>
-
-          {/* 移動記録 */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>移動記録</CardTitle>
-                <CardDescription>{event.trips.length}件の移動が記録されています</CardDescription>
-              </div>
-              <Button asChild>
-                <Link href={`/events/${eventId}/trips/new`}>+ 移動追加</Link>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <TripListCompact trips={event.trips} eventId={eventId} />
             </CardContent>
           </Card>
         </div>
