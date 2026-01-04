@@ -16,7 +16,9 @@ export const authConfig: NextAuthConfig = {
   ],
   callbacks: {
     jwt({ token, user }) {
-      if (user) {
+      // user is only present on initial sign in (runtime check)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (user?.id) {
         token.id = user.id;
         token.role = user.role;
       }

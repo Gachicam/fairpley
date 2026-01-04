@@ -1,18 +1,37 @@
-import type { DefaultSession, NextAuthConfig } from "next-auth";
 import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "./prisma";
+import { authConfig } from "./auth.config";
 import type { UserRole } from "@prisma/client";
 
-const config: NextAuthConfig = {
-  adapter: PrismaAdapter(prisma) as NextAuthConfig["adapter"],
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    }),
-  ],
+// Node.js Runtime用の設定（API routeで使用）
+// アダプターとDB接続を含む
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  adapter: PrismaAdapter(prisma) as any,
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user, trigger }) {
+      // user is only present on initial sign in (runtime check)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (user?.id) {
+        token.id = user.id;
+        token.role = user.role;
+      }
+      // セッション更新時にDBから最新のロールを取得
+      if (trigger === "update" && typeof token.id === "string") {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { role: true },
+        });
+        if (dbUser) {
+          token.role = dbUser.role;
+        }
+      }
+      return token;
+    },
+  },
   events: {
     // 新規ユーザー作成時のロール設定
     async createUser({ user }) {
@@ -25,29 +44,7 @@ const config: NextAuthConfig = {
       });
     },
   },
-  callbacks: {
-    session({ session, user }) {
-      session.user.id = user.id;
-      session.user.role = user.role;
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/login",
-  },
-};
+});
 
-export const { handlers, auth, signIn, signOut } = NextAuth(config);
-
-// 型拡張
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      role: UserRole;
-    } & DefaultSession["user"];
-  }
-  interface User {
-    role: UserRole;
-  }
-}
+// 型拡張は auth.config.ts で定義済み
+export type { UserRole };
