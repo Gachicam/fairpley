@@ -131,8 +131,9 @@ model Location {
   lng     Float
   type    LocationType
 
-  tripsFrom Trip[] @relation("TripFrom")
-  tripsTo   Trip[] @relation("TripTo")
+  tripsFrom     Trip[]         @relation("TripFrom")
+  tripsTo       Trip[]         @relation("TripTo")
+  tripWaypoints TripWaypoint[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -201,6 +202,7 @@ model Trip {
   to      Location @relation("TripTo", fields: [toId], references: [id], onDelete: Cascade)
 
   passengers TripPassenger[]
+  waypoints  TripWaypoint[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -220,6 +222,20 @@ model TripPassenger {
   @@unique([tripId, memberId])
   @@index([tripId])
   @@index([memberId])
+}
+
+model TripWaypoint {
+  id         String @id @default(uuid(7))
+  tripId     String
+  locationId String
+  order      Int // 経由地の順番（0から始まる）
+
+  trip     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, order])
+  @@index([tripId])
+  @@index([locationId])
 }
 
 model Payment {
