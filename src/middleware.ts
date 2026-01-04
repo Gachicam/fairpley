@@ -1,8 +1,11 @@
-import { auth } from "@/lib/auth";
+import NextAuth from "next-auth";
+import { authConfig } from "@/lib/auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const session = req.auth;
-  const isLoggedIn = Boolean(session);
+  const isLoggedIn = Boolean(session?.user);
   const userRole = session?.user.role;
   const isLoginPage = req.nextUrl.pathname === "/login";
   const isPendingPage = req.nextUrl.pathname === "/pending";
