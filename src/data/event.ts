@@ -40,7 +40,11 @@ export type EventWithFullDetails = Prisma.EventGetPayload<{
         to: true;
         passengers: {
           include: {
-            member: true;
+            member: {
+              include: {
+                user: true;
+              };
+            };
           };
         };
       };
@@ -123,7 +127,13 @@ export async function getEventById(eventId: string): Promise<EventWithFullDetail
           from: true,
           to: true,
           passengers: {
-            include: { member: true },
+            include: {
+              member: {
+                include: {
+                  user: true,
+                },
+              },
+            },
           },
         },
       },

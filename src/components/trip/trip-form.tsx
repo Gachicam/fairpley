@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createTrip, updateTrip } from "@/actions/trip";
+import { calculateDistance } from "@/lib/google-maps";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Loader2, Route } from "lucide-react";
 
 interface Member {
   id: string;
@@ -33,6 +35,8 @@ interface Vehicle {
 interface Location {
   id: string;
   name: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface Trip {
@@ -66,6 +70,11 @@ export function TripForm({
   const router = useRouter();
   const isEditing = Boolean(trip);
 
+  const [fromId, setFromId] = useState<string>(trip?.fromId ?? "");
+  const [toId, setToId] = useState<string>(trip?.toId ?? "");
+  const [distance, setDistance] = useState<string>(trip?.distance?.toString() ?? "");
+  const [isCalculating, setIsCalculating] = useState(false);
+
   const [state, formAction, isPending] = useActionState<FormState, FormData>(
     async (_prevState, formData) => {
       const result = isEditing ? await updateTrip(formData) : await createTrip(formData);
@@ -77,6 +86,49 @@ export function TripForm({
     {}
   );
 
+  const handleCalculateDistance = useCallback(async () => {
+    if (!fromId || !toId) {
+      alert("出発地と到着地を選択してください");
+      return;
+    }
+
+    const fromLocation = locations.find((l) => l.id === fromId);
+    const toLocation = locations.find((l) => l.id === toId);
+
+    if (fromLocation === undefined || toLocation === undefined) {
+      alert("選択した場所が見つかりません");
+      return;
+    }
+
+    if (
+      fromLocation.lat === undefined ||
+      fromLocation.lng === undefined ||
+      toLocation.lat === undefined ||
+      toLocation.lng === undefined
+    ) {
+      alert("選択した場所に座標情報がありません");
+      return;
+    }
+
+    setIsCalculating(true);
+    try {
+      const result = await calculateDistance(
+        { lat: fromLocation.lat, lng: fromLocation.lng },
+        { lat: toLocation.lat, lng: toLocation.lng }
+      );
+
+      if (result) {
+        setDistance(result.distanceKm.toString());
+      } else {
+        alert("距離の計算に失敗しました");
+      }
+    } catch {
+      alert("距離の計算中にエラーが発生しました");
+    } finally {
+      setIsCalculating(false);
+    }
+  }, [fromId, toId, locations]);
+
   const getDisplayName = (member: Member): string => {
     return member.nickname ?? member.user.name ?? member.user.email;
   };
@@ -86,6 +138,9 @@ export function TripForm({
   };
 
   const defaultPassengerIds = trip?.passengers.map((p) => p.memberId) ?? [];
+
+  const hasApiKey =
+    typeof window !== "undefined" && Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
 
   return (
     <Card>
@@ -129,7 +184,7 @@ export function TripForm({
             <div className="space-y-2">
               <Label htmlFor="fromId">出発地</Label>
               {locations.length > 0 ? (
-                <Select name="fromId" defaultValue={trip?.fromId}>
+                <Select name="fromId" value={fromId} onValueChange={setFromId}>
                   <SelectTrigger>
                     <SelectValue placeholder="出発地を選択" />
                   </SelectTrigger>
@@ -152,7 +207,7 @@ export function TripForm({
             <div className="space-y-2">
               <Label htmlFor="toId">到着地</Label>
               {locations.length > 0 ? (
-                <Select name="toId" defaultValue={trip?.toId}>
+                <Select name="toId" value={toId} onValueChange={setToId}>
                   <SelectTrigger>
                     <SelectValue placeholder="到着地を選択" />
                   </SelectTrigger>
@@ -172,17 +227,37 @@ export function TripForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="distance">距離（km、任意）</Label>
-            <Input
-              id="distance"
-              name="distance"
-              type="number"
-              step="0.1"
-              placeholder="例: 50.5"
-              defaultValue={trip?.distance ?? undefined}
-              min={0}
-              max={10000}
-            />
+            <Label htmlFor="distance">距離（km）</Label>
+            <div className="flex gap-2">
+              <Input
+                id="distance"
+                name="distance"
+                type="number"
+                step="0.1"
+                placeholder="例: 50.5"
+                value={distance}
+                onChange={(e) => setDistance(e.target.value)}
+                min={0}
+                max={10000}
+                className="flex-1"
+              />
+              {hasApiKey && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCalculateDistance}
+                  disabled={isCalculating || !fromId || !toId}
+                  title="ルートから距離を計算"
+                >
+                  {isCalculating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Route className="h-4 w-4" />
+                  )}
+                  <span className="ml-2 hidden sm:inline">自動計算</span>
+                </Button>
+              )}
+            </div>
             {state.error?.distance && (
               <p className="text-sm text-red-500">{state.error.distance[0]}</p>
             )}

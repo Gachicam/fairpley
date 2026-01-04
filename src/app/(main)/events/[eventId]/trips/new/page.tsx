@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getEventById, getEventVehicles } from "@/data/event";
+import { getEventById } from "@/data/event";
 import { getLocations } from "@/actions/location";
+import { getVehicles } from "@/actions/vehicle";
 import { TripForm } from "@/components/trip/trip-form";
 
 interface PageProps {
@@ -12,7 +13,7 @@ export default async function NewTripPage({ params }: PageProps): Promise<React.
   const { eventId } = await params;
   const [event, vehicles, locations] = await Promise.all([
     getEventById(eventId),
-    getEventVehicles(eventId),
+    getVehicles(),
     getLocations(),
   ]);
 
@@ -37,6 +38,8 @@ export default async function NewTripPage({ params }: PageProps): Promise<React.
   const locationList = locations.map((l) => ({
     id: l.id,
     name: l.name,
+    lat: l.lat,
+    lng: l.lng,
   }));
 
   return (
