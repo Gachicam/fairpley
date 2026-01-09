@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getEventById } from "@/data/event";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EventSettings } from "@/components/event/event-settings";
@@ -63,17 +64,55 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
             <CardContent>
               {event.payments.length > 0 ? (
                 <div className="divide-y">
-                  {event.payments.slice(0, 5).map((payment) => (
-                    <div key={payment.id} className="flex items-center justify-between py-3">
-                      <div>
-                        <p className="font-medium">{payment.description}</p>
-                        <p className="text-muted-foreground text-sm">
-                          {payment.payer.name} が支払い
-                        </p>
-                      </div>
-                      <p className="font-bold">¥{payment.amount.toLocaleString()}</p>
-                    </div>
-                  ))}
+                  {event.payments.slice(0, 5).map((payment) => {
+                    const MAX_DISPLAY_BENEFICIARIES = 5;
+                    const beneficiaries = payment.beneficiaries;
+                    const displayedBeneficiaries = beneficiaries.slice(0, MAX_DISPLAY_BENEFICIARIES);
+                    const remainingCount = beneficiaries.length - MAX_DISPLAY_BENEFICIARIES;
+
+                    return (
+                      <Link
+                        key={payment.id}
+                        href={`/events/${eventId}/payments/${payment.id}/edit`}
+                        className="flex items-center justify-between gap-4 py-3 hover:bg-muted/50 -mx-2 px-2 rounded transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{payment.description}</p>
+                          <div className="flex items-center gap-2 text-sm">
+                            <div className="flex items-center gap-1">
+                              <Avatar className="size-5">
+                                <AvatarImage src={payment.payer.image ?? undefined} alt={payment.payer.name ?? ""} />
+                                <AvatarFallback className="text-xs">
+                                  {payment.payer.name?.charAt(0) ?? "?"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-muted-foreground">{payment.payer.name}</span>
+                            </div>
+                            <span className="text-muted-foreground">→</span>
+                            <div className="flex items-center -space-x-1.5">
+                              {displayedBeneficiaries.map((b) => (
+                                <Avatar key={b.id} className="size-5 border-2 border-background">
+                                  <AvatarImage
+                                    src={b.member.user.image ?? undefined}
+                                    alt={b.member.nickname ?? b.member.user.name ?? ""}
+                                  />
+                                  <AvatarFallback className="text-xs">
+                                    {(b.member.nickname ?? b.member.user.name)?.charAt(0) ?? "?"}
+                                  </AvatarFallback>
+                                </Avatar>
+                              ))}
+                              {remainingCount > 0 && (
+                                <div className="flex size-5 items-center justify-center rounded-full border-2 border-background bg-muted text-xs">
+                                  +{remainingCount}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <p className="font-bold whitespace-nowrap">¥{payment.amount.toLocaleString()}</p>
+                      </Link>
+                    );
+                  })}
                   {event.payments.length > 5 && (
                     <div className="pt-3 text-center">
                       <Button variant="link" asChild>

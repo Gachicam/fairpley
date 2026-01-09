@@ -30,7 +30,15 @@ export type EventWithFullDetails = Prisma.EventGetPayload<{
     payments: {
       include: {
         payer: true;
-        beneficiaries: true;
+        beneficiaries: {
+          include: {
+            member: {
+              include: {
+                user: true;
+              };
+            };
+          };
+        };
       };
     };
   };
@@ -101,7 +109,15 @@ export async function getEventById(eventId: string): Promise<EventWithFullDetail
       payments: {
         include: {
           payer: true,
-          beneficiaries: true,
+          beneficiaries: {
+            include: {
+              member: {
+                include: {
+                  user: true,
+                },
+              },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
       },
