@@ -36,11 +36,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // ログイン時にプロファイル情報を同期
     async signIn({ user, profile }) {
       if (profile && user.id) {
+        // Discord profile から username を取得
+        const discordProfile = profile as { username?: string };
         await prisma.user.update({
           where: { id: user.id },
           data: {
             name: profile.name ?? undefined,
             image: profile.image ?? undefined,
+            username: discordProfile.username ?? undefined,
           },
         });
       }

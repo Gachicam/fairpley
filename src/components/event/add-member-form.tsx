@@ -19,6 +19,7 @@ interface FormState {
 interface User {
   id: string;
   name: string | null;
+  username: string | null;
   email: string;
   image: string | null;
 }
@@ -107,7 +108,7 @@ export function AddMemberForm({ eventId }: AddMemberFormProps): React.ReactEleme
                     setSelectedUser(null);
                   }
                 }}
-                placeholder="名前またはメールで検索..."
+                placeholder="名前・ユーザー名・メールで検索..."
                 autoComplete="off"
               />
               {selectedUser && (
@@ -136,7 +137,9 @@ export function AddMemberForm({ eventId }: AddMemberFormProps): React.ReactEleme
                     </Avatar>
                     <div>
                       <p className="font-medium">{user.name ?? user.email}</p>
-                      {user.name && <p className="text-muted-foreground text-xs">{user.email}</p>}
+                      <p className="text-muted-foreground text-xs">
+                        {user.username ? `@${user.username}` : user.email}
+                      </p>
                     </div>
                   </button>
                 ))}

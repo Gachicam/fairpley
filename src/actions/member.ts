@@ -92,11 +92,13 @@ function normalizeUnicode(str: string): string {
 }
 
 /**
- * ユーザーを検索（名前で部分一致、Unicode装飾文字も対応）
+ * ユーザーを検索（名前・username・メールで部分一致、Unicode装飾文字も対応）
  */
 export async function searchUsers(
   query: string
-): Promise<{ id: string; name: string | null; email: string; image: string | null }[]> {
+): Promise<
+  { id: string; name: string | null; username: string | null; email: string; image: string | null }[]
+> {
   const session = await auth();
   if (!session) {
     throw new Error("認証が必要です");
@@ -113,6 +115,7 @@ export async function searchUsers(
     select: {
       id: true,
       name: true,
+      username: true,
       email: true,
       image: true,
     },
@@ -121,8 +124,13 @@ export async function searchUsers(
 
   const matches = allUsers.filter((user) => {
     const normalizedName = user.name ? normalizeUnicode(user.name) : "";
+    const normalizedUsername = user.username ? normalizeUnicode(user.username) : "";
     const normalizedEmail = normalizeUnicode(user.email);
-    return normalizedName.includes(normalizedQuery) || normalizedEmail.includes(normalizedQuery);
+    return (
+      normalizedName.includes(normalizedQuery) ||
+      normalizedUsername.includes(normalizedQuery) ||
+      normalizedEmail.includes(normalizedQuery)
+    );
   });
 
   return matches.slice(0, 10);

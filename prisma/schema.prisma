@@ -15,6 +15,7 @@ datasource db {
 model User {
   id            String    @id @default(uuid(7))
   name          String?
+  username      String?   // Discord username (@hogehoge)
   email         String    @unique
   emailVerified DateTime?
   image         String?
