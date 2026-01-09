@@ -404,7 +404,7 @@ export async function getEventPayments(eventId: string) {
 
 ### 3.1 概要
 
-イベントへの参加者を追加・管理する機能。
+イベントへの参加者を追加・管理する機能。各参加者はイベントごとに出発地を設定できる（未設定の場合はプロフィールの自宅を使用）。
 
 ### 3.2 Server Actions
 
@@ -418,6 +418,7 @@ const addMemberSchema = z.object({
   eventId: z.string().uuid(),
   email: z.string().email("有効なメールアドレスを入力してください"),
   nickname: z.string().max(50).optional(),
+  departureLocationId: z.string().uuid().optional(), // イベントでの出発地（未設定ならプロフィールの自宅）
 });
 
 export async function addMember(formData: FormData) {
@@ -476,11 +477,14 @@ export async function addMember(formData: FormData) {
     return { error: { email: ["この参加者は既に登録されています"] } };
   }
 
+  const { departureLocationId } = validatedFields.data;
+
   await prisma.eventMember.create({
     data: {
       eventId,
       userId: user.id,
       nickname,
+      departureLocationId,
     },
   });
 
@@ -488,7 +492,56 @@ export async function addMember(formData: FormData) {
 }
 ```
 
-#### 3.2.2 参加者削除
+#### 3.2.2 出発地更新
+
+```typescript
+const updateDepartureSchema = z.object({
+  memberId: z.string().uuid(),
+  eventId: z.string().uuid(),
+  departureLocationId: z.string().uuid().nullable(),
+});
+
+export async function updateDepartureLocation(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    throw new Error("認証が必要です");
+  }
+
+  const validatedFields = updateDepartureSchema.safeParse({
+    memberId: formData.get("memberId"),
+    eventId: formData.get("eventId"),
+    departureLocationId: formData.get("departureLocationId") || null,
+  });
+
+  if (!validatedFields.success) {
+    return { error: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { memberId, eventId, departureLocationId } = validatedFields.data;
+
+  // イベントへのアクセス権チェック
+  await checkEventAccess(eventId, session.user.id);
+
+  // 自分自身のみ更新可能
+  const member = await prisma.eventMember.findUnique({
+    where: { id: memberId },
+    select: { userId: true },
+  });
+
+  if (member?.userId !== session.user.id) {
+    throw new Error("自分の出発地のみ更新できます");
+  }
+
+  await prisma.eventMember.update({
+    where: { id: memberId },
+    data: { departureLocationId },
+  });
+
+  revalidatePath(`/events/${eventId}`);
+}
+```
+
+#### 3.2.3 参加者削除
 
 ```typescript
 export async function removeMember(eventId: string, memberId: string) {
@@ -759,7 +812,13 @@ export async function getDistance(
 
 ### 5.1 概要
 
-自家用車、レンタカー、カーシェアなどの車両を登録・管理する機能。
+自家用車、レンタカー、カーシェア、バイクなどの車両を登録・管理する機能。
+
+**車両タイプ:**
+
+- **OWNED（自家用車）**: 乗り合いで使用、Shapley計算に含める
+- **RENTAL（レンタカー/カーシェア）**: 乗り合いで使用、Shapley計算に含める
+- **BIKE（バイク）**: 単独移動、Shapley計算から除外（自分の交通費のみ負担）
 
 ### 5.2 Server Actions
 
@@ -861,105 +920,67 @@ export async function addRentalOption(formData: FormData) {
 }
 ```
 
----
-
-## 6. 移動記録機能
-
-### 6.1 概要
-
-誰がどの車でどこからどこへ移動したかを記録する機能。
-
-### 6.2 Server Actions
-
-#### 6.2.1 移動記録追加
+#### 5.2.3 バイク追加
 
 ```typescript
-// src/actions/trip.ts
-"use server";
-
-const addTripSchema = z.object({
+const addBikeSchema = z.object({
   eventId: z.string().uuid(),
-  vehicleId: z.string().uuid(),
-  fromId: z.string().uuid(),
-  toId: z.string().uuid(),
-  passengerIds: z.array(z.string().uuid()).min(1),
+  name: z.string().min(1).max(100),
+  ownerId: z.string().uuid(), // EventMember の ID
+  fuelEfficiency: z.number().positive().optional(),
 });
 
-export async function addTrip(formData: FormData) {
+export async function addBike(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) {
     throw new Error("認証が必要です");
   }
 
-  const passengerIds = formData.getAll("passengerIds") as string[];
-
-  const validatedFields = addTripSchema.safeParse({
+  const validatedFields = addBikeSchema.safeParse({
     eventId: formData.get("eventId"),
-    vehicleId: formData.get("vehicleId"),
-    fromId: formData.get("fromId"),
-    toId: formData.get("toId"),
-    passengerIds,
+    name: formData.get("name"),
+    ownerId: formData.get("ownerId"),
+    fuelEfficiency: formData.get("fuelEfficiency")
+      ? parseFloat(formData.get("fuelEfficiency") as string)
+      : undefined,
   });
 
   if (!validatedFields.success) {
     return { error: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { eventId, passengerIds: passengers, ...data } = validatedFields.data;
+  const { eventId, ...data } = validatedFields.data;
 
   await checkEventAccess(eventId, session.user.id);
 
-  // 乗車定員チェック
-  const vehicle = await prisma.vehicle.findUnique({
-    where: { id: data.vehicleId },
-    select: { capacity: true },
-  });
-
-  if (vehicle && passengers.length > vehicle.capacity) {
-    return { error: { passengerIds: ["乗車定員を超えています"] } };
-  }
-
-  // 距離を自動計算
-  const [from, to] = await Promise.all([
-    prisma.location.findUnique({ where: { id: data.fromId } }),
-    prisma.location.findUnique({ where: { id: data.toId } }),
-  ]);
-
-  let distance: number | null = null;
-  if (from && to) {
-    const result = await getDistance(
-      { lat: from.lat, lng: from.lng },
-      { lat: to.lat, lng: to.lng }
-    );
-    distance = result.distanceMeters / 1000; // km に変換
-  }
-
-  await prisma.trip.create({
+  await prisma.vehicle.create({
     data: {
       ...data,
-      eventId,
-      distance,
-      passengers: {
-        create: passengers.map((memberId) => ({ memberId })),
-      },
+      type: "BIKE",
+      capacity: 1, // バイクは1人乗り
     },
   });
 
-  revalidatePath(`/events/${eventId}/trips`);
+  revalidatePath(`/events/${eventId}/vehicles`);
 }
 ```
 
 ---
 
-## 7. 支払い記録機能
+## 6. 支払い記録機能
 
-### 7.1 概要
+### 6.1 概要
 
 各参加者の支払い（食費、交通費など）を記録する機能。
 
-### 7.2 Server Actions
+**交通費フラグ（isTransport）:**
 
-#### 7.2.1 支払い追加
+- **true**: 交通費（ガソリン代、高速代など）→ Shapley値で分配
+- **false**: その他の支払い（食費、宿泊費など）→ 受益者で均等割り
+
+### 6.2 Server Actions
+
+#### 6.2.1 支払い追加
 
 ```typescript
 // src/actions/payment.ts
@@ -970,7 +991,7 @@ const addPaymentSchema = z.object({
   payerId: z.string().uuid(), // 支払者（参加者から選択）
   amount: z.number().int().positive("金額は1円以上にしてください"),
   description: z.string().min(1).max(200),
-  category: z.enum(["FOOD", "TRANSPORT", "LODGING", "EQUIPMENT", "OTHER"]),
+  isTransport: z.boolean().default(false), // 交通費かどうか
   beneficiaryIds: z.array(z.string().uuid()).min(1, "受益者を選択してください"),
 });
 
@@ -987,7 +1008,7 @@ export async function addPayment(formData: FormData) {
     payerId: formData.get("payerId"),
     amount: parseInt(formData.get("amount") as string),
     description: formData.get("description"),
-    category: formData.get("category"),
+    isTransport: formData.get("isTransport") === "true",
     beneficiaryIds,
   });
 
@@ -1015,7 +1036,7 @@ export async function addPayment(formData: FormData) {
 }
 ```
 
-#### 7.2.2 支払い更新
+#### 6.2.2 支払い更新
 
 ```typescript
 const updatePaymentSchema = z.object({
@@ -1024,7 +1045,7 @@ const updatePaymentSchema = z.object({
   payerId: z.string().uuid(), // 支払者（参加者から選択）
   amount: z.number().int().positive("金額は1円以上にしてください"),
   description: z.string().min(1).max(200),
-  category: z.enum(["FOOD", "TRANSPORT", "LODGING", "EQUIPMENT", "OTHER"]),
+  isTransport: z.boolean().default(false), // 交通費かどうか
   beneficiaryIds: z.array(z.string().uuid()).min(1, "受益者を選択してください"),
 });
 
@@ -1042,7 +1063,7 @@ export async function updatePayment(formData: FormData) {
     payerId: formData.get("payerId"),
     amount: parseInt(formData.get("amount") as string),
     description: formData.get("description"),
-    category: formData.get("category"),
+    isTransport: formData.get("isTransport") === "true",
     beneficiaryIds,
   });
 
@@ -1079,7 +1100,7 @@ export async function updatePayment(formData: FormData) {
 }
 ```
 
-#### 7.2.3 支払い削除
+#### 6.2.3 支払い削除
 
 ```typescript
 export async function deletePayment(eventId: string, paymentId: string) {
@@ -1102,22 +1123,120 @@ export async function deletePayment(eventId: string, paymentId: string) {
 
 ---
 
+## 7. ルート計算機能
+
+### 7.1 概要
+
+各連合について、参加者の家を回る最短ルートを自動計算する機能。Shapley値の特性関数で使用。
+
+### 7.2 入力データ
+
+- 各参加者の出発地（自宅またはイベントで指定した場所）
+- 目的地（キャンプ場）
+
+### 7.3 計算方法
+
+- **Google Maps Distance Matrix API**で地点間の距離を取得
+- **最寄り法（Nearest Neighbor）**で巡回ルートを近似
+- 往復距離を算出
+
+### 7.4 実装
+
+```typescript
+// src/lib/route.ts
+import { getDistance } from "./google-maps";
+
+interface Location {
+  lat: number;
+  lng: number;
+}
+
+/**
+ * 出発地リストと目的地から最短ルートの総距離を計算
+ * 巡回セールスマン問題の近似解を使用
+ */
+export async function calculateOptimalRoute(
+  departures: Location[],
+  destination: Location
+): Promise<number> {
+  if (departures.length === 0) return 0;
+  if (departures.length === 1) {
+    // 1人の場合: 出発地 → 目的地 → 出発地（往復）
+    const oneWay = await getDistance(departures[0], destination);
+    return oneWay.distanceMeters * 2 / 1000; // km
+  }
+
+  // 複数人の場合: 最寄り法（Nearest Neighbor）で近似
+  const allPoints = [...departures, destination];
+  const visited = new Set<number>();
+  let current = 0; // 最初の出発地から開始
+  let totalDistance = 0;
+  visited.add(0);
+
+  while (visited.size < allPoints.length) {
+    let nearestIdx = -1;
+    let nearestDist = Infinity;
+
+    for (let i = 0; i < allPoints.length; i++) {
+      if (visited.has(i)) continue;
+      const dist = await getDistance(allPoints[current], allPoints[i]);
+      if (dist.distanceMeters < nearestDist) {
+        nearestDist = dist.distanceMeters;
+        nearestIdx = i;
+      }
+    }
+
+    totalDistance += nearestDist;
+    visited.add(nearestIdx);
+    current = nearestIdx;
+  }
+
+  // 最後に出発地に戻る（往復）
+  const returnDist = await getDistance(allPoints[current], departures[0]);
+  totalDistance += returnDist.distanceMeters;
+
+  return totalDistance / 1000; // km
+}
+```
+
+### 7.5 特性関数での利用
+
+```text
+v(S) = {
+  0                                      if S = {}
+  最短ルート距離 × ガソリン単価 + 高速代  if S ∩ 車所有者 ≠ {}
+  エラー                                  if S ∩ 車所有者 = {}
+}
+```
+
+---
+
 ## 8. 計算・清算機能
 
 ### 8.1 概要
 
-シャープレイ値で公平な負担額を計算し、warikan で清算額を算出する。
+シャープレイ値で交通費を公平に分配し、warikan で清算額を算出する。
+
+- **交通費（isTransport=true）**: Shapley値で分配
+- **その他（isTransport=false）**: 受益者で均等割り
+- **バイクの人**: Shapley計算から除外（自分の交通費のみ負担）
 
 ### 8.2 計算フロー
 
 ```mermaid
 flowchart TD
-    A[支払いデータ取得] --> B[移動記録取得]
-    B --> C[特性関数構築]
-    C --> D[シャープレイ値計算]
-    D --> E[負担額決定]
-    E --> F[warikan で清算額計算]
-    F --> G[清算リスト表示]
+    A[支払いデータ取得] --> B[車両・参加者情報取得]
+    B --> C{車を出せる人がいるか}
+    C -->|いない| D[エラー: 車両登録を促す]
+    C -->|いる| E[バイクの人を分離]
+    E --> F[各連合の最短ルートを計算]
+    F --> G[特性関数構築]
+    G --> H[Shapley値計算]
+    H --> I[交通費: Shapley値で分配]
+    I --> J[バイク: 自分の交通費のみ]
+    J --> K[その他: 受益者で均等割り]
+    K --> L[warikan で清算額計算]
+    L --> M[清算リスト表示]
 ```
 
 ### 8.3 Server Actions
@@ -1129,7 +1248,8 @@ flowchart TD
 "use server";
 
 import { calculateShapleyValues, type CharacteristicFunction } from "shapley";
-import { solve, type Payment as WarikanPayment, type Repayment } from "warikan";
+import { solve, type Payment as WarikanPayment } from "warikan";
+import { calculateOptimalRoute } from "@/lib/route";
 
 interface SettlementResult {
   shapleyValues: { memberId: string; name: string; value: number }[];
@@ -1149,20 +1269,15 @@ export async function calculateSettlement(eventId: string): Promise<SettlementRe
     include: {
       members: {
         include: {
-          user: true,
+          user: { include: { homeLocation: true } },
           vehicles: true,
+          departureLocation: true,
         },
       },
       payments: {
         include: { beneficiaries: true },
       },
-      trips: {
-        include: {
-          vehicle: true,
-          passengers: true,
-        },
-      },
-      rentalOptions: true,
+      destination: true,
     },
   });
 
@@ -1170,81 +1285,92 @@ export async function calculateSettlement(eventId: string): Promise<SettlementRe
     throw new Error("イベントが見つかりません");
   }
 
+  if (!event.destination) {
+    throw new Error("目的地が設定されていません");
+  }
+
   const members = event.members;
-  const memberIds = members.map((m) => m.id);
   const memberMap = new Map(members.map((m) => [m.id, m]));
 
-  // 1. 特性関数を構築（交通費のシャープレイ値計算用）
-  const characteristicFunction: CharacteristicFunction = (coalition) => {
+  // 1. 車を出せる人がいるかチェック（バイク以外）
+  const carOwners = members.filter((m) =>
+    m.vehicles.some((v) => v.type !== "BIKE")
+  );
+  if (carOwners.length === 0) {
+    throw new Error("車を出せる人がいません。車両情報を登録してください。");
+  }
+
+  // 2. バイクの人を分離
+  const bikeMembers = members.filter((m) =>
+    m.vehicles.some((v) => v.type === "BIKE")
+  );
+  const carRiders = members.filter((m) =>
+    !m.vehicles.some((v) => v.type === "BIKE")
+  );
+  const carRiderIds = carRiders.map((m) => m.id);
+
+  // 3. 特性関数を構築
+  const characteristicFunction: CharacteristicFunction = async (coalition) => {
     if (coalition.length === 0) return 0;
 
-    // この連合でかかる交通費を計算
-    let cost = 0;
+    // 連合に車所有者がいるか
+    const ownersInCoalition = coalition.filter((id) =>
+      carOwners.some((m) => m.id === id)
+    );
 
-    for (const trip of event.trips) {
-      const passengerIds = trip.passengers.map((p) => p.memberId);
-      const relevantPassengers = passengerIds.filter((id) =>
-        coalition.includes(id)
-      );
-
-      if (relevantPassengers.length === 0) continue;
-
-      // 車の所有者がこの連合にいるか？
-      const vehicleOwner = trip.vehicle.ownerId;
-      const hasOwner = vehicleOwner && coalition.includes(vehicleOwner);
-
-      if (hasOwner && trip.vehicle.type === "OWNED") {
-        // 自家用車: ガソリン代を計算
-        const distance = trip.distance || 0;
-        const fuelEfficiency = trip.vehicle.fuelEfficiency || 10;
-        const gasPrice = event.gasPricePerLiter; // イベントごとに設定
-        cost += (distance / fuelEfficiency) * gasPrice;
-      } else {
-        // レンタカー: 最も安いオプションを選択
-        const cheapestRental = event.rentalOptions
-          .filter((r) => r.capacity >= relevantPassengers.length)
-          .sort((a, b) => a.baseFee - b.baseFee)[0];
-
-        if (cheapestRental) {
-          cost += cheapestRental.baseFee;
-          if (cheapestRental.distanceFee && trip.distance) {
-            cost += cheapestRental.distanceFee * trip.distance;
-          }
-        } else {
-          // レンタカーオプションがない場合は高めの見積もり
-          cost += 15000;
-        }
-      }
+    if (ownersInCoalition.length === 0) {
+      throw new Error("車を出せる人がいません");
     }
 
-    return cost;
+    // 各メンバーの出発地を取得
+    const departures = coalition
+      .map((id) => {
+        const member = memberMap.get(id);
+        const loc = member?.departureLocation || member?.user.homeLocation;
+        return loc ? { lat: loc.lat, lng: loc.lng } : null;
+      })
+      .filter(Boolean) as { lat: number; lng: number }[];
+
+    // 目的地
+    const destination = { lat: event.destination!.lat, lng: event.destination!.lng };
+
+    // 最短ルートの距離を計算
+    const routeDistance = await calculateOptimalRoute(departures, destination);
+
+    // ガソリン代を計算
+    const fuelEfficiency = 10; // km/L（デフォルト）
+    const gasPrice = event.gasPricePerLiter;
+    const gasCost = (routeDistance / fuelEfficiency) * gasPrice;
+
+    // 高速代は支払い記録から取得（isTransport=true かつ「高速」を含む）
+    const highwayCost = event.payments
+      .filter((p) => p.isTransport && p.description.includes("高速"))
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    return gasCost + highwayCost;
   };
 
-  // 2. シャープレイ値を計算
-  const shapleyResults = calculateShapleyValues(memberIds, characteristicFunction);
-  const totalTransportCost = characteristicFunction(memberIds);
+  // 4. 車に乗る人のShapley値を計算
+  const shapleyResults = await calculateShapleyValues(carRiderIds, characteristicFunction);
 
-  // シャープレイ値を正規化（合計が総交通費になるように）
-  const shapleySum = shapleyResults.reduce((sum, r) => sum + r.value, 0);
   const normalizedShapley = shapleyResults.map((r) => ({
     memberId: r.player,
     name: memberMap.get(r.player)?.nickname || memberMap.get(r.player)?.user.name || "",
-    value: shapleySum > 0 ? (r.value / shapleySum) * totalTransportCost : 0,
+    value: r.value,
   }));
 
-  // 3. 各人の支払い額と負担すべき額を計算
+  // 5. 各人の支払い額と負担すべき額を計算
   const contributions = members.map((member) => {
     // 支払った額
     const paid = event.payments
       .filter((p) => p.payerId === member.userId)
       .reduce((sum, p) => sum + p.amount, 0);
 
-    // 負担すべき額（交通費以外は均等割り + 交通費はシャープレイ値）
     let shouldPay = 0;
 
-    // 交通費以外
+    // 交通費以外: 受益者で均等割り
     for (const payment of event.payments) {
-      if (payment.category === "TRANSPORT") continue;
+      if (payment.isTransport) continue;
 
       const isBeneficiary = payment.beneficiaries.some(
         (b) => b.memberId === member.id
@@ -1254,9 +1380,19 @@ export async function calculateSettlement(eventId: string): Promise<SettlementRe
       }
     }
 
-    // 交通費はシャープレイ値で
-    const shapley = normalizedShapley.find((s) => s.memberId === member.id);
-    shouldPay += shapley?.value || 0;
+    // 交通費
+    const isBiker = bikeMembers.some((m) => m.id === member.id);
+    if (isBiker) {
+      // バイク: 自分の交通費支払いのみ
+      const bikeTransportCost = event.payments
+        .filter((p) => p.isTransport && p.payerId === member.userId)
+        .reduce((sum, p) => sum + p.amount, 0);
+      shouldPay += bikeTransportCost;
+    } else {
+      // 車: Shapley値で分配
+      const shapley = normalizedShapley.find((s) => s.memberId === member.id);
+      shouldPay += shapley?.value || 0;
+    }
 
     return {
       memberId: member.id,
@@ -1266,22 +1402,19 @@ export async function calculateSettlement(eventId: string): Promise<SettlementRe
     };
   });
 
-  // 4. warikan で清算額を計算
-  // シャープレイ値による不均等分割を扱うため、残高を「銀行」経由で表現
+  // 6. warikan で清算額を計算
   const BANK = "__SETTLEMENT_BANK__";
   const warikanPayments: WarikanPayment[] = [];
 
   for (const c of contributions) {
     const balance = c.paid - c.shouldPay;
     if (balance > 0) {
-      // 債権者: 銀行に対して「貸し」がある
       warikanPayments.push({
         amount: Math.round(balance),
         payer: c.memberId,
         beneficiaries: [BANK],
       });
     } else if (balance < 0) {
-      // 債務者: 銀行から恩恵を受けている
       warikanPayments.push({
         amount: Math.round(-balance),
         payer: BANK,
@@ -1290,13 +1423,9 @@ export async function calculateSettlement(eventId: string): Promise<SettlementRe
     }
   }
 
-  // warikan.solve() で清算リストを生成
   const rawRepayments = solve(warikanPayments);
-
-  // memberId から名前へのマッピング
   const nameMap = new Map(members.map((m) => [m.id, m.nickname || m.user.name]));
 
-  // 清算リスト（BANK は残高 0 なので repayments には出現しない）
   const repayments = rawRepayments.map((r) => ({
     from: nameMap.get(r.from) || r.from,
     to: nameMap.get(r.to) || r.to,
@@ -1313,11 +1442,47 @@ export async function calculateSettlement(eventId: string): Promise<SettlementRe
 
 ### 8.4 エラーハンドリング
 
-| エラー            | 原因             | 対処                             |
-| ----------------- | ---------------- | -------------------------------- |
-| EmptyPlayersError | 参加者がいない   | 参加者を追加するよう促す         |
-| 移動記録なし      | 交通費計算不可   | 交通費は0として計算              |
-| 計算結果が NaN    | 特性関数のエラー | エラーログ記録、デフォルト値使用 |
+| エラー                 | 原因                         | 対処                             |
+| ---------------------- | ---------------------------- | -------------------------------- |
+| EmptyPlayersError      | 参加者がいない               | 参加者を追加するよう促す         |
+| 車を出せる人がいない   | 車両（バイク以外）が未登録   | 車両情報を登録するよう促す       |
+| 目的地が設定されていない | イベントの目的地が未設定     | イベント設定で目的地を登録       |
+| 出発地が設定されていない | 参加者の出発地が未設定       | プロフィールで自宅を登録         |
+| 計算結果が NaN         | 特性関数のエラー             | エラーログ記録、デフォルト値使用 |
+
+### 8.5 計算例
+
+**状況**: A, B, C, Dの4人でキャンプ。
+
+- A: 車所有（東京）
+- B: 車なし（横浜）
+- C: 車なし（千葉）
+- D: バイク所有（埼玉）→ Shapley計算から除外
+
+**支払い記録**:
+
+- ガソリン代: 5,000円（Aが支払い、isTransport=true）
+- 高速代: 3,000円（Aが支払い、isTransport=true）
+- Dのバイクガソリン代: 1,500円（Dが支払い、isTransport=true）
+- 食費: 12,000円（Bが支払い、isTransport=false、全員で均等割り）
+
+**Shapley計算（A, B, Cのみ）**:
+
+| 連合S     | 最短ルート                           | 距離   | コストv(S) |
+| --------- | ------------------------------------ | ------ | ---------- |
+| {A}       | 東京→キャンプ場→東京                 | 200km  | 8,000円    |
+| {B}       | -                                    | -      | (エラー)   |
+| {C}       | -                                    | -      | (エラー)   |
+| {A,B}     | 東京→横浜→キャンプ場→横浜→東京       | 240km  | 9,600円    |
+| {A,C}     | 東京→千葉→キャンプ場→千葉→東京       | 260km  | 10,400円   |
+| {B,C}     | -                                    | -      | (エラー)   |
+| {A,B,C}   | 最適ルート                           | 280km  | 11,200円   |
+
+**結果**:
+
+- A: 車を出す貢献により負担軽減
+- B, C: 拾ってもらう分のコスト増加分を負担
+- D: バイクガソリン代 1,500円（自分の分のみ）+ 食費 3,000円
 
 ---
 
