@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { addMemberSchema } from "@/lib/schemas/member";
+import { addMemberSchema, addMemberByUserIdSchema } from "@/lib/schemas/member";
 import { revalidatePath } from "next/cache";
 
 // 戻り値の型定義
@@ -72,6 +72,120 @@ export async function addMember(formData: FormData): Promise<ActionResult> {
     data: {
       eventId,
       userId: user.id,
+      nickname,
+    },
+  });
+
+  revalidatePath(`/events/${eventId}`);
+  return {};
+}
+
+/**
+ * Unicode装飾文字を正規化してASCII相当に変換
+ * 例: 𝓙𝓲𝓬𝓱𝓸𝓾𝓟 → JichouP
+ */
+function normalizeUnicode(str: string): string {
+  return str
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // 結合文字（アクセント記号等）を削除
+    .toLowerCase();
+}
+
+/**
+ * ユーザーを検索（名前で部分一致、Unicode装飾文字も対応）
+ */
+export async function searchUsers(
+  query: string
+): Promise<{ id: string; name: string | null; email: string; image: string | null }[]> {
+  const session = await auth();
+  if (!session) {
+    throw new Error("認証が必要です");
+  }
+
+  if (!query || query.length < 2) {
+    return [];
+  }
+
+  const normalizedQuery = normalizeUnicode(query);
+
+  // 全ユーザーを取得してUnicode正規化検索
+  const allUsers = await prisma.user.findMany({
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+    },
+    take: 200,
+  });
+
+  const matches = allUsers.filter((user) => {
+    const normalizedName = user.name ? normalizeUnicode(user.name) : "";
+    const normalizedEmail = normalizeUnicode(user.email);
+    return normalizedName.includes(normalizedQuery) || normalizedEmail.includes(normalizedQuery);
+  });
+
+  return matches.slice(0, 10);
+}
+
+/**
+ * ユーザーIDを指定してイベントに参加者を追加
+ */
+export async function addMemberByUserId(formData: FormData): Promise<ActionResult> {
+  const session = await auth();
+  if (!session) {
+    throw new Error("認証が必要です");
+  }
+
+  const nicknameValue = formData.get("nickname");
+  const validatedFields = addMemberByUserIdSchema.safeParse({
+    eventId: formData.get("eventId"),
+    userId: formData.get("userId"),
+    nickname: typeof nicknameValue === "string" && nicknameValue ? nicknameValue : undefined,
+  });
+
+  if (!validatedFields.success) {
+    return { error: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { eventId, userId, nickname } = validatedFields.data;
+
+  // イベントへのアクセス権チェック
+  const event = await prisma.event.findFirst({
+    where: {
+      id: eventId,
+      members: { some: { userId: session.user.id } },
+    },
+  });
+
+  if (!event) {
+    throw new Error("イベントが見つかりません");
+  }
+
+  // ユーザーの存在確認
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    return { error: { userId: ["ユーザーが見つかりません"] } };
+  }
+
+  // 既に参加者かチェック
+  const existingMember = await prisma.eventMember.findUnique({
+    where: {
+      eventId_userId: { eventId, userId },
+    },
+  });
+
+  if (existingMember) {
+    return { error: { userId: ["この参加者は既に登録されています"] } };
+  }
+
+  await prisma.eventMember.create({
+    data: {
+      eventId,
+      userId,
       nickname,
     },
   });
