@@ -33,6 +33,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   events: {
+    // ログイン時にプロファイル情報を同期
+    async signIn({ user, profile }) {
+      if (profile && user.id) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            name: profile.name ?? undefined,
+            image: profile.image ?? undefined,
+          },
+        });
+      }
+    },
     // 新規ユーザー作成時のロール設定
     async createUser({ user }) {
       // 初回ユーザーは管理者、以降は承認待ち
