@@ -18,13 +18,14 @@ import type { EventWithFullDetails } from "@/data/event";
 
 interface EventSettingsProps {
   event: EventWithFullDetails;
+  isAdmin: boolean;
 }
 
 interface FormState {
   error?: Record<string, string[]>;
 }
 
-export function EventSettings({ event }: EventSettingsProps): React.ReactElement {
+export function EventSettings({ event, isAdmin }: EventSettingsProps): React.ReactElement {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -129,29 +130,31 @@ export function EventSettings({ event }: EventSettingsProps): React.ReactElement
         </DialogContent>
       </Dialog>
 
-      {/* 削除ダイアログ */}
-      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogTrigger asChild>
-          <Button variant="destructive">削除</Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>イベントを削除</DialogTitle>
-            <DialogDescription>
-              この操作は取り消せません。イベント「{event.name}
-              」を削除してもよろしいですか？
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteOpen(false)} disabled={isDeleting}>
-              キャンセル
-            </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-              {isDeleting ? "削除中..." : "削除する"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* 削除ダイアログ（管理者のみ） */}
+      {isAdmin && (
+        <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+          <DialogTrigger asChild>
+            <Button variant="destructive">削除</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>イベントを削除</DialogTitle>
+              <DialogDescription>
+                この操作は取り消せません。イベント「{event.name}
+                」を削除してもよろしいですか？
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDeleteOpen(false)} disabled={isDeleting}>
+                キャンセル
+              </Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                {isDeleting ? "削除中..." : "削除する"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

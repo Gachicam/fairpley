@@ -23,6 +23,7 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
   }
 
   const isOwner = event.ownerId === session?.user.id;
+  const isAdmin = session?.user.role === "ADMIN";
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -41,7 +42,7 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
               {event.endDate.toLocaleDateString("ja-JP")}
             </p>
           </div>
-          {isOwner && <EventSettings event={event} />}
+          {(isOwner || isAdmin) && <EventSettings event={event} isAdmin={isAdmin} />}
         </div>
       </div>
 

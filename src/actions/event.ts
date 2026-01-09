@@ -97,7 +97,7 @@ export async function updateEvent(formData: FormData): Promise<ActionResult> {
 }
 
 /**
- * イベント削除
+ * イベント削除（管理者のみ）
  */
 export async function deleteEvent(eventId: string): Promise<never> {
   const session = await auth();
@@ -105,14 +105,19 @@ export async function deleteEvent(eventId: string): Promise<never> {
     throw new Error("認証が必要です");
   }
 
-  // オーナーのみ削除可能
+  // 管理者のみ削除可能
+  if (session.user.role !== "ADMIN") {
+    throw new Error("イベントの削除権限がありません");
+  }
+
+  // イベントの存在確認
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { ownerId: true },
+    select: { id: true },
   });
 
-  if (event?.ownerId !== session.user.id) {
-    throw new Error("イベントの削除権限がありません");
+  if (!event) {
+    throw new Error("イベントが見つかりません");
   }
 
   // カスケード削除（関連データも削除）
