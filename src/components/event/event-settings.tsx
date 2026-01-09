@@ -145,7 +145,11 @@ export function EventSettings({ event, isAdmin }: EventSettingsProps): React.Rea
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDeleteOpen(false)} disabled={isDeleting}>
+              <Button
+                variant="outline"
+                onClick={() => setIsDeleteOpen(false)}
+                disabled={isDeleting}
+              >
                 キャンセル
               </Button>
               <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>

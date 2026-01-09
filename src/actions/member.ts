@@ -94,10 +94,14 @@ function normalizeUnicode(str: string): string {
 /**
  * ユーザーを検索（名前・username・メールで部分一致、Unicode装飾文字も対応）
  */
-export async function searchUsers(
-  query: string
-): Promise<
-  { id: string; name: string | null; username: string | null; email: string; image: string | null }[]
+export async function searchUsers(query: string): Promise<
+  {
+    id: string;
+    name: string | null;
+    username: string | null;
+    email: string;
+    image: string | null;
+  }[]
 > {
   const session = await auth();
   if (!session) {
