@@ -64,7 +64,7 @@ export function AddMemberForm({ eventId }: AddMemberFormProps): React.ReactEleme
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query && !selectedUser) {
-        handleSearch(query);
+        void handleSearch(query);
       }
     }, 300);
 
@@ -114,21 +114,21 @@ export function AddMemberForm({ eventId }: AddMemberFormProps): React.ReactEleme
                 <button
                   type="button"
                   onClick={handleClearSelection}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2"
                 >
                   ✕
                 </button>
               )}
             </div>
-            {isSearching && <p className="text-sm text-muted-foreground">検索中...</p>}
+            {isSearching && <p className="text-muted-foreground text-sm">検索中...</p>}
             {users.length > 0 && !selectedUser && (
-              <div className="rounded-md border bg-background shadow-md">
+              <div className="bg-background rounded-md border shadow-md">
                 {users.map((user) => (
                   <button
                     key={user.id}
                     type="button"
                     onClick={() => handleSelectUser(user)}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted first:rounded-t-md last:rounded-b-md"
+                    className="hover:bg-muted flex w-full items-center gap-3 px-3 py-2 text-left first:rounded-t-md last:rounded-b-md"
                   >
                     <Avatar className="h-8 w-8">
                       <AvatarImage src={user.image ?? undefined} alt={user.name ?? ""} />
@@ -136,20 +136,16 @@ export function AddMemberForm({ eventId }: AddMemberFormProps): React.ReactEleme
                     </Avatar>
                     <div>
                       <p className="font-medium">{user.name ?? user.email}</p>
-                      {user.name && (
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
-                      )}
+                      {user.name && <p className="text-muted-foreground text-xs">{user.email}</p>}
                     </div>
                   </button>
                 ))}
               </div>
             )}
             {query.length >= 2 && users.length === 0 && !isSearching && !selectedUser && (
-              <p className="text-sm text-muted-foreground">ユーザーが見つかりません</p>
+              <p className="text-muted-foreground text-sm">ユーザーが見つかりません</p>
             )}
-            {state.error?.userId && (
-              <p className="text-sm text-red-500">{state.error.userId[0]}</p>
-            )}
+            {state.error?.userId && <p className="text-sm text-red-500">{state.error.userId[0]}</p>}
           </div>
 
           <div className="space-y-2">

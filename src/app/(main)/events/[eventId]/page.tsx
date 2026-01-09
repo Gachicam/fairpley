@@ -67,21 +67,27 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
                   {event.payments.slice(0, 5).map((payment) => {
                     const MAX_DISPLAY_BENEFICIARIES = 5;
                     const beneficiaries = payment.beneficiaries;
-                    const displayedBeneficiaries = beneficiaries.slice(0, MAX_DISPLAY_BENEFICIARIES);
+                    const displayedBeneficiaries = beneficiaries.slice(
+                      0,
+                      MAX_DISPLAY_BENEFICIARIES
+                    );
                     const remainingCount = beneficiaries.length - MAX_DISPLAY_BENEFICIARIES;
 
                     return (
                       <Link
                         key={payment.id}
                         href={`/events/${eventId}/payments/${payment.id}/edit`}
-                        className="flex items-center justify-between gap-4 py-3 hover:bg-muted/50 -mx-2 px-2 rounded transition-colors"
+                        className="hover:bg-muted/50 -mx-2 flex items-center justify-between gap-4 rounded px-2 py-3 transition-colors"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{payment.description}</p>
+                          <p className="truncate font-medium">{payment.description}</p>
                           <div className="flex items-center gap-2 text-sm">
                             <div className="flex items-center gap-1">
                               <Avatar className="size-5">
-                                <AvatarImage src={payment.payer.image ?? undefined} alt={payment.payer.name ?? ""} />
+                                <AvatarImage
+                                  src={payment.payer.image ?? undefined}
+                                  alt={payment.payer.name ?? ""}
+                                />
                                 <AvatarFallback className="text-xs">
                                   {payment.payer.name?.charAt(0) ?? "?"}
                                 </AvatarFallback>
@@ -91,7 +97,7 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
                             <span className="text-muted-foreground">→</span>
                             <div className="flex items-center -space-x-1.5">
                               {displayedBeneficiaries.map((b) => (
-                                <Avatar key={b.id} className="size-5 border-2 border-background">
+                                <Avatar key={b.id} className="border-background size-5 border-2">
                                   <AvatarImage
                                     src={b.member.user.image ?? undefined}
                                     alt={b.member.nickname ?? b.member.user.name ?? ""}
@@ -102,14 +108,16 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
                                 </Avatar>
                               ))}
                               {remainingCount > 0 && (
-                                <div className="flex size-5 items-center justify-center rounded-full border-2 border-background bg-muted text-xs">
+                                <div className="border-background bg-muted flex size-5 items-center justify-center rounded-full border-2 text-xs">
                                   +{remainingCount}
                                 </div>
                               )}
                             </div>
                           </div>
                         </div>
-                        <p className="font-bold whitespace-nowrap">¥{payment.amount.toLocaleString()}</p>
+                        <p className="font-bold whitespace-nowrap">
+                          ¥{payment.amount.toLocaleString()}
+                        </p>
                       </Link>
                     );
                   })}

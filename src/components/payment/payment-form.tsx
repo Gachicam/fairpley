@@ -186,7 +186,12 @@ export function PaymentForm({ eventId, members, payment }: PaymentFormProps): Re
             <Button type="submit" disabled={isPending || isDeleting}>
               {isPending ? "保存中..." : getSubmitLabel()}
             </Button>
-            <Button type="button" variant="outline" onClick={() => router.back()} disabled={isDeleting}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+              disabled={isDeleting}
+            >
               キャンセル
             </Button>
             {isEditing && (
@@ -195,7 +200,7 @@ export function PaymentForm({ eventId, members, payment }: PaymentFormProps): Re
                   <Button
                     type="button"
                     variant="ghost"
-                    className="ml-auto text-destructive hover:text-destructive"
+                    className="text-destructive hover:text-destructive ml-auto"
                     disabled={isPending || isDeleting}
                   >
                     {isDeleting ? "削除中..." : "削除"}
@@ -205,7 +210,8 @@ export function PaymentForm({ eventId, members, payment }: PaymentFormProps): Re
                   <AlertDialogHeader>
                     <AlertDialogTitle>支払いを削除</AlertDialogTitle>
                     <AlertDialogDescription>
-                      「{payment?.description}」（¥{payment?.amount.toLocaleString()}）を削除してもよろしいですか？
+                      「{payment?.description}」（¥{payment?.amount.toLocaleString()}
+                      ）を削除してもよろしいですか？
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
