@@ -19,6 +19,7 @@ export default async function NewPaymentPage({ params }: PageProps): Promise<Rea
     id: m.id,
     nickname: m.nickname,
     user: {
+      id: m.user.id,
       name: m.user.name,
       email: m.user.email,
     },

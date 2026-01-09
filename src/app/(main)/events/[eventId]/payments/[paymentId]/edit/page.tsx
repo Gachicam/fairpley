@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getEventById, getPaymentById } from "@/data/event";
 import { PaymentForm } from "@/components/payment/payment-form";
-import type { PaymentCategory } from "@/lib/schemas/payment";
 
 interface PageProps {
   params: Promise<{ eventId: string; paymentId: string }>;
@@ -20,6 +19,7 @@ export default async function EditPaymentPage({ params }: PageProps): Promise<Re
     id: m.id,
     nickname: m.nickname,
     user: {
+      id: m.user.id,
       name: m.user.name,
       email: m.user.email,
     },
@@ -27,9 +27,9 @@ export default async function EditPaymentPage({ params }: PageProps): Promise<Re
 
   const paymentData = {
     id: payment.id,
+    payerId: payment.payerId,
     amount: payment.amount,
     description: payment.description,
-    category: payment.category as PaymentCategory,
     beneficiaries: payment.beneficiaries.map((b) => ({ memberId: b.memberId })),
   };
 

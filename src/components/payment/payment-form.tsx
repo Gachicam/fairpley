@@ -1,8 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createPayment, updatePayment } from "@/actions/payment";
+import { createPayment, updatePayment, deletePayment } from "@/actions/payment";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,13 +26,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { paymentCategoryLabels } from "@/lib/schemas/payment";
-import type { PaymentCategory } from "@/lib/schemas/payment";
 
 interface Member {
   id: string;
   nickname: string | null;
   user: {
+    id: string;
     name: string | null;
     email: string;
   };
@@ -29,9 +39,9 @@ interface Member {
 
 interface Payment {
   id: string;
+  payerId: string;
   amount: number;
   description: string;
-  category: PaymentCategory;
   beneficiaries: { memberId: string }[];
 }
 
@@ -48,6 +58,7 @@ interface FormState {
 export function PaymentForm({ eventId, members, payment }: PaymentFormProps): React.ReactElement {
   const router = useRouter();
   const isEditing = Boolean(payment);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [state, formAction, isPending] = useActionState<FormState, FormData>(
     async (_prevState, formData) => {
@@ -59,6 +70,18 @@ export function PaymentForm({ eventId, members, payment }: PaymentFormProps): Re
     },
     {}
   );
+
+  const handleDelete = async (): Promise<void> => {
+    if (!payment?.id) return;
+    setIsDeleting(true);
+    try {
+      await deletePayment(payment.id);
+      router.push(`/events/${eventId}`);
+    } catch (error) {
+      console.error("Failed to delete payment:", error);
+      setIsDeleting(false);
+    }
+  };
 
   const getDisplayName = (member: Member): string => {
     return member.nickname ?? member.user.name ?? member.user.email;
@@ -118,23 +141,21 @@ export function PaymentForm({ eventId, members, payment }: PaymentFormProps): Re
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="category">カテゴリ</Label>
-              <Select name="category" defaultValue={payment?.category ?? "FOOD"}>
+              <Label htmlFor="payerId">支払った人</Label>
+              <Select name="payerId" defaultValue={payment?.payerId ?? members[0]?.user.id}>
                 <SelectTrigger>
-                  <SelectValue placeholder="カテゴリを選択" />
+                  <SelectValue placeholder="支払者を選択" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(Object.entries(paymentCategoryLabels) as [PaymentCategory, string][]).map(
-                    ([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    )
-                  )}
+                  {members.map((member) => (
+                    <SelectItem key={member.user.id} value={member.user.id}>
+                      {getDisplayName(member)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              {state.error?.category && (
-                <p className="text-sm text-red-500">{state.error.category[0]}</p>
+              {state.error?.payerId && (
+                <p className="text-sm text-red-500">{state.error.payerId[0]}</p>
               )}
             </div>
           </div>
@@ -161,13 +182,39 @@ export function PaymentForm({ eventId, members, payment }: PaymentFormProps): Re
             )}
           </div>
 
-          <div className="flex gap-4">
-            <Button type="submit" disabled={isPending}>
+          <div className="flex items-center gap-4">
+            <Button type="submit" disabled={isPending || isDeleting}>
               {isPending ? "保存中..." : getSubmitLabel()}
             </Button>
-            <Button type="button" variant="outline" onClick={() => router.back()}>
+            <Button type="button" variant="outline" onClick={() => router.back()} disabled={isDeleting}>
               キャンセル
             </Button>
+            {isEditing && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="ml-auto text-destructive hover:text-destructive"
+                    disabled={isPending || isDeleting}
+                  >
+                    {isDeleting ? "削除中..." : "削除"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>支払いを削除</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      「{payment?.description}」（¥{payment?.amount.toLocaleString()}）を削除してもよろしいですか？
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete}>削除する</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         </form>
       </CardContent>

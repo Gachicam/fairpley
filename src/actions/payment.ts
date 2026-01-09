@@ -25,9 +25,9 @@ export async function createPayment(formData: FormData): Promise<ActionResult | 
 
   const validatedFields = createPaymentSchema.safeParse({
     eventId: formData.get("eventId"),
+    payerId: formData.get("payerId"),
     amount: isNaN(amount) ? 0 : amount,
     description: formData.get("description"),
-    category: formData.get("category"),
     beneficiaryIds: beneficiaryIds.filter((id): id is string => typeof id === "string"),
   });
 
@@ -35,7 +35,7 @@ export async function createPayment(formData: FormData): Promise<ActionResult | 
     return { error: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { eventId, ...data } = validatedFields.data;
+  const { eventId, payerId, ...data } = validatedFields.data;
 
   // イベントへのアクセス権チェック
   const event = await prisma.event.findFirst({
@@ -52,10 +52,9 @@ export async function createPayment(formData: FormData): Promise<ActionResult | 
   await prisma.payment.create({
     data: {
       eventId,
-      payerId: session.user.id,
+      payerId,
       amount: data.amount,
       description: data.description,
-      category: data.category,
       beneficiaries: {
         create: data.beneficiaryIds.map((memberId) => ({
           memberId,
@@ -83,9 +82,9 @@ export async function updatePayment(formData: FormData): Promise<ActionResult> {
 
   const validatedFields = updatePaymentSchema.safeParse({
     id: formData.get("id"),
+    payerId: formData.get("payerId"),
     amount: isNaN(amount) ? 0 : amount,
     description: formData.get("description"),
-    category: formData.get("category"),
     beneficiaryIds: beneficiaryIds.filter((id): id is string => typeof id === "string"),
   });
 
@@ -93,7 +92,7 @@ export async function updatePayment(formData: FormData): Promise<ActionResult> {
     return { error: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { id, beneficiaryIds: newBeneficiaryIds, ...data } = validatedFields.data;
+  const { id, payerId, beneficiaryIds: newBeneficiaryIds, ...data } = validatedFields.data;
 
   // 支払いの存在確認とアクセス権チェック
   const payment = await prisma.payment.findUnique({
@@ -126,6 +125,7 @@ export async function updatePayment(formData: FormData): Promise<ActionResult> {
       where: { id },
       data: {
         ...data,
+        payerId,
         beneficiaries: {
           create: newBeneficiaryIds.map((memberId) => ({
             memberId,
