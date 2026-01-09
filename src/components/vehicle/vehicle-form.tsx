@@ -98,12 +98,12 @@ export function VehicleForm({
 
       <div className="space-y-2">
         <Label htmlFor="ownerId">所有者</Label>
-        <Select name="ownerId" defaultValue={vehicle?.ownerId ?? ""}>
+        <Select name="ownerId" defaultValue={vehicle?.ownerId ?? "__none__"}>
           <SelectTrigger>
             <SelectValue placeholder="所有者を選択（任意）" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">未設定</SelectItem>
+            <SelectItem value="__none__">未設定</SelectItem>
             {members.map((member) => (
               <SelectItem key={member.id} value={member.id}>
                 {member.nickname ?? member.user.name ?? "名前なし"}

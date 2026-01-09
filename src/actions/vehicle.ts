@@ -31,7 +31,10 @@ export async function createVehicle(formData: FormData): Promise<ActionResult> {
     eventId: formData.get("eventId"),
     name: formData.get("name"),
     type: formData.get("type"),
-    ownerId: typeof ownerIdRaw === "string" && ownerIdRaw ? ownerIdRaw : undefined,
+    ownerId:
+      typeof ownerIdRaw === "string" && ownerIdRaw && ownerIdRaw !== "__none__"
+        ? ownerIdRaw
+        : undefined,
     capacity: typeof capacityRaw === "string" ? parseInt(capacityRaw, 10) : 4,
     fuelEfficiency:
       typeof fuelEfficiencyRaw === "string" && fuelEfficiencyRaw
@@ -84,7 +87,10 @@ export async function updateVehicle(eventId: string, formData: FormData): Promis
     id: formData.get("id"),
     name: formData.get("name"),
     type: formData.get("type"),
-    ownerId: typeof ownerIdRaw === "string" && ownerIdRaw ? ownerIdRaw : undefined,
+    ownerId:
+      typeof ownerIdRaw === "string" && ownerIdRaw && ownerIdRaw !== "__none__"
+        ? ownerIdRaw
+        : undefined,
     capacity: typeof capacityRaw === "string" ? parseInt(capacityRaw, 10) : 4,
     fuelEfficiency:
       typeof fuelEfficiencyRaw === "string" && fuelEfficiencyRaw
