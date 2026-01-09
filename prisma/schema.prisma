@@ -181,12 +181,11 @@ model RentalOption {
 }
 
 model Payment {
-  id          String          @id @default(uuid(7))
+  id          String @id @default(uuid(7))
   eventId     String
   payerId     String
   amount      Int
-  description String          @db.VarChar(200)
-  category    PaymentCategory
+  description String @db.VarChar(200)
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   payer User  @relation(fields: [payerId], references: [id], onDelete: Cascade)
@@ -198,15 +197,6 @@ model Payment {
 
   @@index([eventId])
   @@index([payerId])
-  @@index([category])
-}
-
-enum PaymentCategory {
-  FOOD      // 食費
-  TRANSPORT // 交通費
-  LODGING   // 宿泊費
-  EQUIPMENT // 装備・道具
-  OTHER     // その他
 }
 
 model PaymentBeneficiary {

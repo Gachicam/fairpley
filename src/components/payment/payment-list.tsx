@@ -15,15 +15,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { paymentCategoryLabels } from "@/lib/schemas/payment";
-import type { PaymentCategory } from "@/lib/schemas/payment";
 
 interface Payment {
   id: string;
   amount: number;
   description: string;
-  category: string;
   createdAt: Date;
   payer: {
     id: string;
@@ -88,12 +84,7 @@ export function PaymentList({ payments, eventId, members }: PaymentListProps): R
       {payments.map((payment) => (
         <div key={payment.id} className="flex items-center justify-between py-4">
           <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <p className="font-medium">{payment.description}</p>
-              <Badge variant="secondary">
-                {paymentCategoryLabels[payment.category as PaymentCategory]}
-              </Badge>
-            </div>
+            <p className="font-medium">{payment.description}</p>
             <p className="text-muted-foreground text-sm">{getPayerName(payment.payer)} が支払い</p>
             <p className="text-muted-foreground text-xs">
               受益者: {payment.beneficiaries.map((b) => getMemberName(b.memberId)).join(", ")}

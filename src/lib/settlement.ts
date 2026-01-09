@@ -1,10 +1,7 @@
-import type { PaymentCategory } from "@prisma/client";
-
 interface Payment {
   id: string;
   amount: number;
   payerId: string;
-  category: PaymentCategory;
   beneficiaries: { memberId: string }[];
 }
 
@@ -44,7 +41,6 @@ export interface SettlementResult {
   balances: MemberBalance[];
   transfers: Transfer[];
   totalAmount: number;
-  categoryBreakdown: Record<PaymentCategory, number>;
 }
 
 /**
@@ -83,21 +79,11 @@ export function calculateSettlement(payments: Payment[], members: Member[]): Set
     });
   }
 
-  // カテゴリ別金額
-  const categoryBreakdown: Record<PaymentCategory, number> = {
-    FOOD: 0,
-    TRANSPORT: 0,
-    LODGING: 0,
-    EQUIPMENT: 0,
-    OTHER: 0,
-  };
-
   let totalAmount = 0;
 
   // 支払いを処理
   for (const payment of payments) {
     totalAmount += payment.amount;
-    categoryBreakdown[payment.category] += payment.amount;
 
     // 支払者のMemberIdを取得
     const payerMemberId = userIdToMemberIdMap.get(payment.payerId);
@@ -172,6 +158,5 @@ export function calculateSettlement(payments: Payment[], members: Member[]): Set
     balances,
     transfers,
     totalAmount,
-    categoryBreakdown,
   };
 }

@@ -3,9 +3,6 @@ import { notFound } from "next/navigation";
 import { getEventById } from "@/data/event";
 import { calculateSettlement } from "@/lib/settlement";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { paymentCategoryLabels } from "@/lib/schemas/payment";
-import type { PaymentCategory } from "@/lib/schemas/payment";
 
 interface PageProps {
   params: Promise<{ eventId: string }>;
@@ -33,7 +30,6 @@ export default async function SettlementPage({ params }: PageProps): Promise<Rea
     id: p.id,
     amount: p.amount,
     payerId: p.payerId,
-    category: p.category,
     beneficiaries: p.beneficiaries.map((b) => ({ memberId: b.memberId })),
   }));
 
@@ -68,21 +64,9 @@ export default async function SettlementPage({ params }: PageProps): Promise<Rea
         <Card>
           <CardHeader>
             <CardTitle>合計金額</CardTitle>
-            <CardDescription>カテゴリ別の内訳</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="mb-4 text-3xl font-bold">¥{settlement.totalAmount.toLocaleString()}</p>
-            <div className="space-y-2">
-              {(Object.entries(settlement.categoryBreakdown) as [PaymentCategory, number][])
-                .filter(([, amount]) => amount > 0)
-                .sort(([, a], [, b]) => b - a)
-                .map(([category, amount]) => (
-                  <div key={category} className="flex items-center justify-between">
-                    <Badge variant="outline">{paymentCategoryLabels[category]}</Badge>
-                    <span>¥{amount.toLocaleString()}</span>
-                  </div>
-                ))}
-            </div>
+            <p className="text-3xl font-bold">¥{settlement.totalAmount.toLocaleString()}</p>
           </CardContent>
         </Card>
 

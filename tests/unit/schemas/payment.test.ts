@@ -1,27 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { createPaymentSchema, updatePaymentSchema, paymentCategoryEnum } from "@/lib/schemas/payment";
-
-describe("paymentCategoryEnum", () => {
-  it("有効なカテゴリを受け入れる", () => {
-    const validCategories = ["FOOD", "TRANSPORT", "LODGING", "EQUIPMENT", "OTHER"];
-    for (const category of validCategories) {
-      const result = paymentCategoryEnum.safeParse(category);
-      expect(result.success).toBe(true);
-    }
-  });
-
-  it("無効なカテゴリを拒否する", () => {
-    const result = paymentCategoryEnum.safeParse("INVALID");
-    expect(result.success).toBe(false);
-  });
-});
+import { createPaymentSchema, updatePaymentSchema } from "@/lib/schemas/payment";
 
 describe("createPaymentSchema", () => {
   const validInput = {
     eventId: "123e4567-e89b-12d3-a456-426614174000",
+    payerId: "123e4567-e89b-12d3-a456-426614174003",
     amount: 5000,
     description: "食材費",
-    category: "FOOD",
     beneficiaryIds: [
       "123e4567-e89b-12d3-a456-426614174001",
       "123e4567-e89b-12d3-a456-426614174002",
@@ -35,7 +20,6 @@ describe("createPaymentSchema", () => {
       if (result.success) {
         expect(result.data.amount).toBe(5000);
         expect(result.data.description).toBe("食材費");
-        expect(result.data.category).toBe("FOOD");
         expect(result.data.beneficiaryIds).toHaveLength(2);
       }
     });
@@ -54,17 +38,6 @@ describe("createPaymentSchema", () => {
         amount: 10000000,
       });
       expect(result.success).toBe(true);
-    });
-
-    it("全カテゴリを受け入れる", () => {
-      const categories = ["FOOD", "TRANSPORT", "LODGING", "EQUIPMENT", "OTHER"];
-      for (const category of categories) {
-        const result = createPaymentSchema.safeParse({
-          ...validInput,
-          category,
-        });
-        expect(result.success).toBe(true);
-      }
     });
 
     it("受益者1人を受け入れる", () => {
@@ -133,14 +106,6 @@ describe("createPaymentSchema", () => {
       expect(result.success).toBe(false);
     });
 
-    it("カテゴリが無効な場合はエラー", () => {
-      const result = createPaymentSchema.safeParse({
-        ...validInput,
-        category: "INVALID",
-      });
-      expect(result.success).toBe(false);
-    });
-
     it("受益者が0人の場合はエラー", () => {
       const result = createPaymentSchema.safeParse({
         ...validInput,
@@ -167,9 +132,9 @@ describe("createPaymentSchema", () => {
 describe("updatePaymentSchema", () => {
   const validInput = {
     id: "123e4567-e89b-12d3-a456-426614174000",
+    payerId: "123e4567-e89b-12d3-a456-426614174003",
     amount: 3000,
     description: "更新された説明",
-    category: "TRANSPORT",
     beneficiaryIds: ["123e4567-e89b-12d3-a456-426614174001"],
   };
 

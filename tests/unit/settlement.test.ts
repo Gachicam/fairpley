@@ -21,13 +21,11 @@ const createPayment = (
   id: string,
   amount: number,
   payerId: string,
-  beneficiaryMemberIds: string[],
-  category: "FOOD" | "TRANSPORT" | "LODGING" | "EQUIPMENT" | "OTHER" = "FOOD"
+  beneficiaryMemberIds: string[]
 ) => ({
   id,
   amount,
   payerId,
-  category,
   beneficiaries: beneficiaryMemberIds.map((memberId) => ({ memberId })),
 });
 
@@ -148,26 +146,6 @@ describe("calculateSettlement", () => {
 
       const charlieBalance = result.balances.find((b) => b.memberId === "m3");
       expect(charlieBalance?.owed).toBe(1000);
-    });
-  });
-
-  describe("カテゴリ別集計", () => {
-    it("カテゴリ別の金額が正しく集計される", () => {
-      const members = [createMember("m1", "u1", "Alice")];
-      const payments = [
-        createPayment("p1", 1000, "u1", ["m1"], "FOOD"),
-        createPayment("p2", 2000, "u1", ["m1"], "TRANSPORT"),
-        createPayment("p3", 500, "u1", ["m1"], "FOOD"),
-        createPayment("p4", 3000, "u1", ["m1"], "LODGING"),
-      ];
-
-      const result = calculateSettlement(payments, members);
-
-      expect(result.categoryBreakdown.FOOD).toBe(1500);
-      expect(result.categoryBreakdown.TRANSPORT).toBe(2000);
-      expect(result.categoryBreakdown.LODGING).toBe(3000);
-      expect(result.categoryBreakdown.EQUIPMENT).toBe(0);
-      expect(result.categoryBreakdown.OTHER).toBe(0);
     });
   });
 
