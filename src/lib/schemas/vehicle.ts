@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const vehicleTypeEnum = z.enum(["OWNED", "RENTAL", "CARSHARE"]);
+export const vehicleTypeEnum = z.enum(["OWNED", "RENTAL", "CARSHARE", "BIKE"]);
 
 export type VehicleType = z.infer<typeof vehicleTypeEnum>;
 
@@ -8,6 +8,7 @@ export const vehicleTypeLabels: Record<VehicleType, string> = {
   OWNED: "自家用車",
   RENTAL: "レンタカー",
   CARSHARE: "カーシェア",
+  BIKE: "バイク",
 };
 
 export const createVehicleSchema = z.object({

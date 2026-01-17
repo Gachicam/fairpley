@@ -42,6 +42,7 @@ interface Payment {
   payerId: string;
   amount: number;
   description: string;
+  isTransport: boolean;
   beneficiaries: { memberId: string }[];
 }
 
@@ -158,6 +159,21 @@ export function PaymentForm({ eventId, members, payment }: PaymentFormProps): Re
                 <p className="text-sm text-red-500">{state.error.payerId[0]}</p>
               )}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="hover:bg-accent flex cursor-pointer items-center gap-3 rounded-lg border p-4">
+              <Checkbox name="isTransport" defaultChecked={payment?.isTransport ?? false} />
+              <div>
+                <span className="font-medium">交通費として登録</span>
+                <p className="text-muted-foreground text-sm">
+                  チェックするとShapley値による公平な分配が適用されます（ガソリン代、高速代など）
+                </p>
+              </div>
+            </label>
+            {state.error?.isTransport && (
+              <p className="text-sm text-red-500">{state.error.isTransport[0]}</p>
+            )}
           </div>
 
           <div className="space-y-3">

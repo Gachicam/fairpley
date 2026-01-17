@@ -23,11 +23,15 @@ export async function createPayment(formData: FormData): Promise<ActionResult | 
   const amountRaw = formData.get("amount");
   const amount = typeof amountRaw === "string" ? parseInt(amountRaw, 10) : 0;
 
+  const isTransportRaw = formData.get("isTransport");
+  const isTransport = isTransportRaw === "true" || isTransportRaw === "on";
+
   const validatedFields = createPaymentSchema.safeParse({
     eventId: formData.get("eventId"),
     payerId: formData.get("payerId"),
     amount: isNaN(amount) ? 0 : amount,
     description: formData.get("description"),
+    isTransport,
     beneficiaryIds: beneficiaryIds.filter((id): id is string => typeof id === "string"),
   });
 
@@ -55,6 +59,7 @@ export async function createPayment(formData: FormData): Promise<ActionResult | 
       payerId,
       amount: data.amount,
       description: data.description,
+      isTransport: data.isTransport,
       beneficiaries: {
         create: data.beneficiaryIds.map((memberId) => ({
           memberId,
@@ -80,11 +85,15 @@ export async function updatePayment(formData: FormData): Promise<ActionResult> {
   const amountRaw = formData.get("amount");
   const amount = typeof amountRaw === "string" ? parseInt(amountRaw, 10) : 0;
 
+  const isTransportRaw = formData.get("isTransport");
+  const isTransport = isTransportRaw === "true" || isTransportRaw === "on";
+
   const validatedFields = updatePaymentSchema.safeParse({
     id: formData.get("id"),
     payerId: formData.get("payerId"),
     amount: isNaN(amount) ? 0 : amount,
     description: formData.get("description"),
+    isTransport,
     beneficiaryIds: beneficiaryIds.filter((id): id is string => typeof id === "string"),
   });
 
@@ -124,7 +133,9 @@ export async function updatePayment(formData: FormData): Promise<ActionResult> {
     prisma.payment.update({
       where: { id },
       data: {
-        ...data,
+        amount: data.amount,
+        description: data.description,
+        isTransport: data.isTransport,
         payerId,
         beneficiaries: {
           create: newBeneficiaryIds.map((memberId) => ({

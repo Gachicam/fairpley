@@ -21,10 +21,16 @@ export type EventWithDetails = Prisma.EventGetPayload<{
 export type EventWithFullDetails = Prisma.EventGetPayload<{
   include: {
     owner: true;
+    destination: true;
     members: {
       include: {
-        user: true;
+        user: {
+          include: {
+            homeLocation: true;
+          };
+        };
         vehicles: true;
+        departureLocation: true;
       };
     };
     payments: {
@@ -39,6 +45,29 @@ export type EventWithFullDetails = Prisma.EventGetPayload<{
             };
           };
         };
+      };
+    };
+  };
+}>;
+
+// 清算計算用のイベントデータ型
+export type EventForSettlement = Prisma.EventGetPayload<{
+  include: {
+    destination: true;
+    members: {
+      include: {
+        user: {
+          include: {
+            homeLocation: true;
+          };
+        };
+        vehicles: true;
+        departureLocation: true;
+      };
+    };
+    payments: {
+      include: {
+        beneficiaries: true;
       };
     };
   };
@@ -100,10 +129,16 @@ export async function getEventById(eventId: string): Promise<EventWithFullDetail
     where: { id: eventId },
     include: {
       owner: true,
+      destination: true,
       members: {
         include: {
-          user: true,
+          user: {
+            include: {
+              homeLocation: true,
+            },
+          },
           vehicles: true,
+          departureLocation: true,
         },
       },
       payments: {
@@ -205,6 +240,51 @@ export async function getPaymentById(paymentId: string): Promise<PaymentWithDeta
   }
 
   return payment;
+}
+
+/**
+ * 清算計算用のイベントデータを取得
+ */
+export async function getEventForSettlement(eventId: string): Promise<EventForSettlement | null> {
+  const session = await auth();
+  if (!session) {
+    return null;
+  }
+
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: {
+      destination: true,
+      members: {
+        include: {
+          user: {
+            include: {
+              homeLocation: true,
+            },
+          },
+          vehicles: true,
+          departureLocation: true,
+        },
+      },
+      payments: {
+        include: {
+          beneficiaries: true,
+        },
+      },
+    },
+  });
+
+  if (!event) {
+    return null;
+  }
+
+  // アクセス権チェック
+  const isMember = event.members.some((m) => m.userId === session.user.id);
+  if (!isMember) {
+    return null;
+  }
+
+  return event;
 }
 
 export type VehicleWithOwner = Prisma.VehicleGetPayload<{

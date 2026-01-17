@@ -146,15 +146,6 @@ export async function deleteVehicle(eventId: string, vehicleId: string): Promise
     throw new Error("イベントが見つかりません");
   }
 
-  // 使用中の移動記録があるかチェック
-  const tripCount = await prisma.trip.count({
-    where: { vehicleId },
-  });
-
-  if (tripCount > 0) {
-    throw new Error("この車両は移動記録で使用されているため削除できません");
-  }
-
   await prisma.vehicle.delete({
     where: { id: vehicleId },
   });
@@ -266,15 +257,6 @@ export async function deleteGlobalVehicle(vehicleId: string): Promise<void> {
   const session = await auth();
   if (!session) {
     throw new Error("認証が必要です");
-  }
-
-  // 使用中の移動記録があるかチェック
-  const tripCount = await prisma.trip.count({
-    where: { vehicleId },
-  });
-
-  if (tripCount > 0) {
-    throw new Error("この車両は移動記録で使用されているため削除できません");
   }
 
   await prisma.vehicle.delete({

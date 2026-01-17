@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createVehicle, updateVehicle } from "@/actions/vehicle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,10 @@ export function VehicleForm({
   onSuccess,
 }: VehicleFormProps): React.ReactElement {
   const isEditing = Boolean(vehicle);
+  const [vehicleType, setVehicleType] = useState<VehicleType>(
+    vehicle ? (vehicle.type as VehicleType) : "OWNED"
+  );
+  const isBike = vehicleType === "BIKE";
 
   const action = async (
     _prevState: { error?: Record<string, string[]> },
@@ -79,7 +83,11 @@ export function VehicleForm({
 
       <div className="space-y-2">
         <Label htmlFor="type">種類</Label>
-        <Select name="type" defaultValue={vehicle?.type ?? "OWNED"}>
+        <Select
+          name="type"
+          defaultValue={vehicle?.type ?? "OWNED"}
+          onValueChange={(value) => setVehicleType(value as VehicleType)}
+        >
           <SelectTrigger>
             <SelectValue placeholder="種類を選択" />
           </SelectTrigger>
@@ -93,6 +101,11 @@ export function VehicleForm({
             )}
           </SelectContent>
         </Select>
+        {isBike && (
+          <p className="text-muted-foreground text-sm">
+            バイクは交通費のShapley値計算から除外されます
+          </p>
+        )}
         {state.error?.type && <p className="text-destructive text-sm">{state.error.type[0]}</p>}
       </div>
 
@@ -113,37 +126,41 @@ export function VehicleForm({
         </Select>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="capacity">定員</Label>
-          <Input
-            id="capacity"
-            name="capacity"
-            type="number"
-            min={1}
-            max={20}
-            defaultValue={vehicle?.capacity ?? 4}
-            required
-          />
-          {state.error?.capacity && (
-            <p className="text-destructive text-sm">{state.error.capacity[0]}</p>
-          )}
-        </div>
+      {isBike ? (
+        <input type="hidden" name="capacity" value="1" />
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="capacity">定員</Label>
+            <Input
+              id="capacity"
+              name="capacity"
+              type="number"
+              min={1}
+              max={20}
+              defaultValue={vehicle?.capacity ?? 4}
+              required
+            />
+            {state.error?.capacity && (
+              <p className="text-destructive text-sm">{state.error.capacity[0]}</p>
+            )}
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="fuelEfficiency">燃費 (km/L)</Label>
-          <Input
-            id="fuelEfficiency"
-            name="fuelEfficiency"
-            type="number"
-            step="0.1"
-            min={1}
-            max={50}
-            placeholder="例: 20.0"
-            defaultValue={vehicle?.fuelEfficiency ?? ""}
-          />
+          <div className="space-y-2">
+            <Label htmlFor="fuelEfficiency">燃費 (km/L)</Label>
+            <Input
+              id="fuelEfficiency"
+              name="fuelEfficiency"
+              type="number"
+              step="0.1"
+              min={1}
+              max={50}
+              placeholder="例: 20.0"
+              defaultValue={vehicle?.fuelEfficiency ?? ""}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <Button type="submit" disabled={isPending} className="w-full">
         {isPending && "保存中..."}

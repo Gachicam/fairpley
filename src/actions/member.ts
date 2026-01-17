@@ -258,3 +258,46 @@ export async function removeMember(eventId: string, memberId: string): Promise<v
 
   revalidatePath(`/events/${eventId}`);
 }
+
+/**
+ * 参加者の出発地を更新
+ */
+export async function updateDepartureLocation(
+  eventId: string,
+  memberId: string,
+  departureLocationId: string | null
+): Promise<void> {
+  const session = await auth();
+  if (!session) {
+    throw new Error("認証が必要です");
+  }
+
+  // イベントへのアクセス権チェック
+  const event = await prisma.event.findFirst({
+    where: {
+      id: eventId,
+      members: { some: { userId: session.user.id } },
+    },
+  });
+
+  if (!event) {
+    throw new Error("イベントが見つかりません");
+  }
+
+  // メンバーの存在確認
+  const member = await prisma.eventMember.findUnique({
+    where: { id: memberId },
+    select: { userId: true, eventId: true },
+  });
+
+  if (member?.eventId !== eventId) {
+    throw new Error("参加者が見つかりません");
+  }
+
+  await prisma.eventMember.update({
+    where: { id: memberId },
+    data: { departureLocationId },
+  });
+
+  revalidatePath(`/events/${eventId}`);
+}

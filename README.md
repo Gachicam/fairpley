@@ -2,7 +2,7 @@
 
 キャンプなどのグループイベントにおける費用をシャープレイ値で公平に分担するアプリケーション。
 
-**本番URL:** https://fairpley.gachicam.com
+**本番URL:** <https://fairpley.gachicam.com>
 
 ## 機能
 
@@ -65,7 +65,7 @@ npx prisma migrate dev
 npm run dev
 ```
 
-http://localhost:3000 でアクセス可能。
+<http://localhost:3000> でアクセス可能。
 
 ## Google Maps API 設定
 
@@ -75,12 +75,12 @@ http://localhost:3000 でアクセス可能。
 
 [Google Cloud Console](https://console.cloud.google.com/) で以下のAPIを有効化:
 
-| API名 | 用途 |
-|-------|------|
-| Maps JavaScript API | 地図の表示 |
-| Places API (New) | 場所検索・オートコンプリート |
-| Geocoding API | 住所から座標を取得 |
-| Routes API | ルート・距離計算（将来機能） |
+| API名               | 用途                         |
+| ------------------- | ---------------------------- |
+| Maps JavaScript API | 地図の表示                   |
+| Places API (New)    | 場所検索・オートコンプリート |
+| Geocoding API       | 住所から座標を取得           |
+| Routes API          | ルート・距離計算（将来機能） |
 
 ### APIキーの作成と制限
 
@@ -88,12 +88,14 @@ http://localhost:3000 でアクセス可能。
 2. 作成したAPIキーをクリックして制限を設定:
 
 **アプリケーションの制限（HTTPリファラー）:**
+
 ```
 localhost:3000/*
 fairpley.gachicam.com/*
 ```
 
 **APIの制限:**
+
 - Maps JavaScript API
 - Places API (New)
 - Geocoding API
