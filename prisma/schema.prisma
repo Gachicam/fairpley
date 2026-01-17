@@ -21,6 +21,10 @@ model User {
   image         String?
   role          UserRole  @default(PENDING)
 
+  // 自宅の場所（Shapley計算のデフォルト出発地）
+  homeLocationId String?
+  homeLocation   Location? @relation("UserHome", fields: [homeLocationId], references: [id], onDelete: SetNull)
+
   accounts Account[]
   sessions Session[]
 
@@ -31,6 +35,8 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([homeLocationId])
 }
 
 enum UserRole {
@@ -92,6 +98,10 @@ model Event {
   ownerId String
   owner   User   @relation("EventOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
+  // 目的地（キャンプ場など）
+  destinationId String?
+  destination   Location? @relation("EventDestination", fields: [destinationId], references: [id], onDelete: SetNull)
+
   members       EventMember[]
   payments      Payment[]
   rentalOptions RentalOption[]
@@ -101,6 +111,7 @@ model Event {
 
   @@index([ownerId])
   @@index([startDate])
+  @@index([destinationId])
 }
 
 model EventMember {
@@ -108,6 +119,10 @@ model EventMember {
   eventId  String
   userId   String
   nickname String? @db.VarChar(50)
+
+  // イベントでの出発地（未設定ならUser.homeLocationを使用）
+  departureLocationId String?
+  departureLocation   Location? @relation("MemberDeparture", fields: [departureLocationId], references: [id], onDelete: SetNull)
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -120,6 +135,7 @@ model EventMember {
   @@unique([eventId, userId])
   @@index([eventId])
   @@index([userId])
+  @@index([departureLocationId])
 }
 
 model Location {
@@ -129,6 +145,11 @@ model Location {
   lat     Float
   lng     Float
   type    LocationType
+
+  // リレーション
+  usersHome         User[]        @relation("UserHome")
+  eventsDestination Event[]       @relation("EventDestination")
+  membersDeparture  EventMember[] @relation("MemberDeparture")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -161,6 +182,7 @@ enum VehicleType {
   OWNED    // 自家用車
   RENTAL   // レンタカー
   CARSHARE // カーシェア
+  BIKE     // バイク（Shapley計算から除外）
 }
 
 model RentalOption {
@@ -182,11 +204,12 @@ model RentalOption {
 }
 
 model Payment {
-  id          String @id @default(uuid(7))
+  id          String  @id @default(uuid(7))
   eventId     String
   payerId     String
   amount      Int
-  description String @db.VarChar(200)
+  description String  @db.VarChar(200)
+  isTransport Boolean @default(false) // 交通費フラグ（true: Shapley値で分配）
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   payer User  @relation(fields: [payerId], references: [id], onDelete: Cascade)

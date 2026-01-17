@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateSettlement } from "@/lib/settlement";
+import { calculateSimpleSettlement } from "@/lib/settlement";
 
 const createMember = (
   id: string,
@@ -29,7 +29,7 @@ const createPayment = (
   beneficiaries: beneficiaryMemberIds.map((memberId) => ({ memberId })),
 });
 
-describe("calculateSettlement", () => {
+describe("calculateSimpleSettlement", () => {
   describe("基本的なシナリオ", () => {
     it("支払いがない場合は空の結果を返す", () => {
       const members = [
@@ -38,7 +38,7 @@ describe("calculateSettlement", () => {
       ];
       const payments: ReturnType<typeof createPayment>[] = [];
 
-      const result = calculateSettlement(payments, members);
+      const result = calculateSimpleSettlement(payments, members);
 
       expect(result.totalAmount).toBe(0);
       expect(result.transfers).toHaveLength(0);
@@ -53,7 +53,7 @@ describe("calculateSettlement", () => {
       ];
       const payments = [createPayment("p1", 1000, "u1", ["m1", "m2"])];
 
-      const result = calculateSettlement(payments, members);
+      const result = calculateSimpleSettlement(payments, members);
 
       expect(result.totalAmount).toBe(1000);
 
@@ -86,7 +86,7 @@ describe("calculateSettlement", () => {
         createPayment("p2", 1000, "u2", ["m1", "m2"]),
       ];
 
-      const result = calculateSettlement(payments, members);
+      const result = calculateSimpleSettlement(payments, members);
 
       expect(result.totalAmount).toBe(2000);
       expect(result.transfers).toHaveLength(0);
@@ -107,7 +107,7 @@ describe("calculateSettlement", () => {
       ];
       const payments = [createPayment("p1", 3000, "u1", ["m1", "m2", "m3"])];
 
-      const result = calculateSettlement(payments, members);
+      const result = calculateSimpleSettlement(payments, members);
 
       expect(result.totalAmount).toBe(3000);
 
@@ -132,7 +132,7 @@ describe("calculateSettlement", () => {
       // AliceがBobとCharlie分の食事を払う（Aliceは食べてない）
       const payments = [createPayment("p1", 2000, "u1", ["m2", "m3"])];
 
-      const result = calculateSettlement(payments, members);
+      const result = calculateSimpleSettlement(payments, members);
 
       // Aliceは2000円払って0円負担 = +2000
       const aliceBalance = result.balances.find((b) => b.memberId === "m1");
@@ -157,7 +157,7 @@ describe("calculateSettlement", () => {
       ];
       const payments = [createPayment("p1", 1000, "u1", ["m1", "m2"])];
 
-      const result = calculateSettlement(payments, members);
+      const result = calculateSimpleSettlement(payments, members);
 
       const aliceBalance = result.balances.find((b) => b.memberId === "m1");
       expect(aliceBalance?.memberName).toBe("アリス");
@@ -177,7 +177,7 @@ describe("calculateSettlement", () => {
       // 1000 / 3 = 333.33...
       const payments = [createPayment("p1", 1000, "u1", ["m1", "m2", "m3"])];
 
-      const result = calculateSettlement(payments, members);
+      const result = calculateSimpleSettlement(payments, members);
 
       // 各メンバーの負担額は丸められる
       for (const balance of result.balances) {
