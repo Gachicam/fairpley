@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getEventById } from "@/data/event";
+import { getLocations } from "@/actions/location";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +16,11 @@ interface PageProps {
 
 export default async function EventPage({ params }: PageProps): Promise<React.ReactElement> {
   const { eventId } = await params;
-  const session = await auth();
-  const event = await getEventById(eventId);
+  const [session, event, locations] = await Promise.all([
+    auth(),
+    getEventById(eventId),
+    getLocations(),
+  ]);
 
   if (!event) {
     notFound();
@@ -42,7 +46,9 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
               {event.endDate.toLocaleDateString("ja-JP")}
             </p>
           </div>
-          {(isOwner || isAdmin) && <EventSettings event={event} isAdmin={isAdmin} />}
+          {(isOwner || isAdmin) && (
+            <EventSettings event={event} locations={locations} isAdmin={isAdmin} />
+          )}
         </div>
       </div>
 
@@ -90,7 +96,7 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
                                   alt={payment.payer.name ?? ""}
                                 />
                                 <AvatarFallback className="text-xs">
-                                  {payment.payer.name?.charAt(0) ?? "?"}
+                                  {[...(payment.payer.name ?? "")][0] ?? "?"}
                                 </AvatarFallback>
                               </Avatar>
                               <span className="text-muted-foreground">{payment.payer.name}</span>
@@ -104,7 +110,7 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
                                     alt={b.member.nickname ?? b.member.user.name ?? ""}
                                   />
                                   <AvatarFallback className="text-xs">
-                                    {(b.member.nickname ?? b.member.user.name)?.charAt(0) ?? "?"}
+                                    {[...(b.member.nickname ?? b.member.user.name ?? "")][0] ?? "?"}
                                   </AvatarFallback>
                                 </Avatar>
                               ))}
@@ -150,6 +156,7 @@ export default async function EventPage({ params }: PageProps): Promise<React.Re
             <CardContent className="space-y-4">
               <MemberList
                 members={event.members}
+                locations={locations}
                 ownerId={event.ownerId}
                 eventId={eventId}
                 isOwner={isOwner}

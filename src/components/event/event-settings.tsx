@@ -12,12 +12,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EventWithFullDetails } from "@/data/event";
 
+interface Location {
+  id: string;
+  name: string;
+}
+
 interface EventSettingsProps {
   event: EventWithFullDetails;
+  locations: Location[];
   isAdmin: boolean;
 }
 
@@ -25,7 +38,11 @@ interface FormState {
   error?: Record<string, string[]>;
 }
 
-export function EventSettings({ event, isAdmin }: EventSettingsProps): React.ReactElement {
+export function EventSettings({
+  event,
+  locations,
+  isAdmin,
+}: EventSettingsProps): React.ReactElement {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -118,6 +135,31 @@ export function EventSettings({ event, isAdmin }: EventSettingsProps): React.Rea
               />
               {state.error?.gasPricePerLiter && (
                 <p className="text-sm text-red-500">{state.error.gasPricePerLiter[0]}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="destinationId">目的地</Label>
+              <Select name="destinationId" defaultValue={event.destinationId ?? "none"}>
+                <SelectTrigger>
+                  <SelectValue placeholder="目的地を選択（任意）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">未設定</SelectItem>
+                  {locations
+                    .filter((location) => location.id)
+                    .map((location) => (
+                      <SelectItem key={location.id} value={location.id}>
+                        {location.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-sm">
+                目的地を設定するとShapley値による交通費分配が有効になります
+              </p>
+              {state.error?.destinationId && (
+                <p className="text-sm text-red-500">{state.error.destinationId[0]}</p>
               )}
             </div>
 

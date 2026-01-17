@@ -62,6 +62,11 @@ export async function updateEvent(formData: FormData): Promise<ActionResult> {
 
   const gasPriceRaw = formData.get("gasPricePerLiter");
   const gasPricePerLiter = typeof gasPriceRaw === "string" ? parseInt(gasPriceRaw, 10) : 170;
+  const destinationIdRaw = formData.get("destinationId");
+  const destinationId =
+    typeof destinationIdRaw === "string" && destinationIdRaw && destinationIdRaw !== "none"
+      ? destinationIdRaw
+      : null;
 
   const validatedFields = updateEventSchema.safeParse({
     id: formData.get("id"),
@@ -69,6 +74,7 @@ export async function updateEvent(formData: FormData): Promise<ActionResult> {
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate"),
     gasPricePerLiter: isNaN(gasPricePerLiter) ? 170 : gasPricePerLiter,
+    destinationId,
   });
 
   if (!validatedFields.success) {
