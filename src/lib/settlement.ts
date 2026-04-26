@@ -16,6 +16,7 @@ interface Payment {
   amount: number;
   payerId: string;
   isTransport: boolean;
+  isHighway: boolean;
   description: string;
   beneficiaries: { memberId: string }[];
 }
@@ -70,12 +71,24 @@ interface ShapleyValue {
   value: number;
 }
 
+// 計算過程を保持する型
+export interface CalculationDetails {
+  totalDistance: number; // 総距離 (km)
+  effectiveFuelEfficiency: number; // 実効燃費 (km/L)
+  gasCost: number; // ガソリン代
+  highwayCost: number; // 高速代
+  carShareBaseFee: number; // カーシェア基本料金
+  carShareDistanceRate: number; // カーシェア距離料金 (円/km)
+  coalitionCount: number; // 計算した連合の数
+}
+
 export interface SettlementResult {
   balances: MemberBalance[];
   transfers: Transfer[];
   shapleyValues: ShapleyValue[];
   totalAmount: number;
   transportCost: number;
+  calculationDetails?: CalculationDetails;
 }
 
 // ============================================
@@ -238,6 +251,10 @@ async function computeShapleyValues(
 // メイン計算関数
 // ============================================
 
+// タイムズカーシェアの料金設定
+const CAR_SHARE_BASE_FEE = 12000; // 36時間パック
+const CAR_SHARE_DISTANCE_RATE = 16; // 円/km
+
 /**
  * 清算を計算する（Shapley値対応版）
  */
@@ -264,11 +281,14 @@ export async function calculateSettlement(event: Event): Promise<SettlementResul
     .reduce((sum, p) => sum + p.amount, 0);
 
   const highwayCost = event.payments
-    .filter((p) => p.isTransport && p.description.includes("高速"))
+    .filter((p) => p.isHighway)
     .reduce((sum, p) => sum + p.amount, 0);
+
+  const gasCost = transportCost - highwayCost;
 
   // 4. 実効燃費を計算（全員の連合での総距離から逆算）
   let effectiveFuelEfficiency = 10; // デフォルト値
+  let totalDistance = 0;
   if (event.destination && carRiderIds.length > 0) {
     // 全員の出発地を取得
     const allDepartures: Location[] = [];
@@ -284,11 +304,10 @@ export async function calculateSettlement(event: Event): Promise<SettlementResul
 
     if (allDepartures.length > 0) {
       // 全員の連合での総距離を計算
-      const totalDistance = await calculateOptimalRoute(allDepartures, event.destination);
+      totalDistance = await calculateOptimalRoute(allDepartures, event.destination);
 
       // 実効燃費を逆算: ガソリン代 = (距離 / 燃費) × 単価
       // よって: 燃費 = 距離 × 単価 / ガソリン代
-      const gasCost = transportCost - highwayCost;
       if (gasCost > 0 && totalDistance > 0) {
         effectiveFuelEfficiency = (totalDistance * event.gasPricePerLiter) / gasCost;
       }
@@ -297,6 +316,7 @@ export async function calculateSettlement(event: Event): Promise<SettlementResul
 
   // 5. Shapley値を計算（目的地が設定されている場合のみ）
   let shapleyValues = new Map<string, number>();
+  let coalitionCount = 0;
   if (event.destination && carRiderIds.length > 0) {
     shapleyValues = await computeShapleyValues(
       event,
@@ -305,6 +325,7 @@ export async function calculateSettlement(event: Event): Promise<SettlementResul
       effectiveFuelEfficiency,
       highwayCost
     );
+    coalitionCount = 1 << carRiderIds.length; // 2^n
   }
 
   // 6. 各メンバーの残高を計算
@@ -405,12 +426,27 @@ export async function calculateSettlement(event: Event): Promise<SettlementResul
   // 10. warikanで清算リストを計算
   const transfers = calculateTransfers(balances);
 
+  // 11. 計算詳細を作成
+  const calculationDetails: CalculationDetails | undefined =
+    event.destination && carRiderIds.length > 0
+      ? {
+          totalDistance: Math.round(totalDistance * 10) / 10,
+          effectiveFuelEfficiency: Math.round(effectiveFuelEfficiency * 10) / 10,
+          gasCost,
+          highwayCost,
+          carShareBaseFee: CAR_SHARE_BASE_FEE,
+          carShareDistanceRate: CAR_SHARE_DISTANCE_RATE,
+          coalitionCount,
+        }
+      : undefined;
+
   return {
     balances,
     transfers,
     shapleyValues: shapleyResults,
     totalAmount,
     transportCost,
+    calculationDetails,
   };
 }
 

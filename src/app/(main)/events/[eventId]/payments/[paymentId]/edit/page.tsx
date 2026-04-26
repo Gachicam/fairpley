@@ -31,6 +31,7 @@ export default async function EditPaymentPage({ params }: PageProps): Promise<Re
     amount: payment.amount,
     description: payment.description,
     isTransport: payment.isTransport,
+    isHighway: payment.isHighway,
     beneficiaries: payment.beneficiaries.map((b) => ({ memberId: b.memberId })),
   };
 

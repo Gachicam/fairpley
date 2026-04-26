@@ -55,6 +55,7 @@ export default async function SettlementPage({ params }: PageProps): Promise<Rea
       amount: p.amount,
       payerId: p.payerId,
       isTransport: p.isTransport,
+      isHighway: p.isHighway,
       description: p.description,
       beneficiaries: p.beneficiaries.map((b) => ({ memberId: b.memberId })),
     })),
@@ -203,6 +204,53 @@ export default async function SettlementPage({ params }: PageProps): Promise<Rea
                   <span className="font-bold">¥{sv.value.toLocaleString()}</span>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 計算の詳細 */}
+      {useShapley && settlement.calculationDetails && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>計算の詳細</CardTitle>
+            <CardDescription>Shapley値計算に使用したパラメータ</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-sm">総距離</p>
+                <p className="text-lg font-bold">{settlement.calculationDetails.totalDistance} km</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-sm">実効燃費</p>
+                <p className="text-lg font-bold">
+                  {settlement.calculationDetails.effectiveFuelEfficiency} km/L
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-sm">ガソリン代</p>
+                <p className="text-lg font-bold">
+                  ¥{settlement.calculationDetails.gasCost.toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-sm">高速代</p>
+                <p className="text-lg font-bold">
+                  ¥{settlement.calculationDetails.highwayCost.toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-sm">カーシェア基準</p>
+                <p className="text-lg font-bold">
+                  ¥{settlement.calculationDetails.carShareBaseFee.toLocaleString()} + ¥
+                  {settlement.calculationDetails.carShareDistanceRate}/km
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-muted-foreground text-sm">計算連合数</p>
+                <p className="text-lg font-bold">{settlement.calculationDetails.coalitionCount}</p>
+              </div>
             </div>
           </CardContent>
         </Card>

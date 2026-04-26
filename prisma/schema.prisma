@@ -210,6 +210,7 @@ model Payment {
   amount      Int
   description String  @db.VarChar(200)
   isTransport Boolean @default(false) // 交通費フラグ（true: Shapley値で分配）
+  isHighway   Boolean @default(false) // 高速代フラグ（燃費計算から除外）
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   payer User  @relation(fields: [payerId], references: [id], onDelete: Cascade)

@@ -43,6 +43,7 @@ interface Payment {
   amount: number;
   description: string;
   isTransport: boolean;
+  isHighway: boolean;
   beneficiaries: { memberId: string }[];
 }
 
@@ -162,15 +163,27 @@ export function PaymentForm({ eventId, members, payment }: PaymentFormProps): Re
           </div>
 
           <div className="space-y-2">
-            <label className="hover:bg-accent flex cursor-pointer items-center gap-3 rounded-lg border p-4">
-              <Checkbox name="isTransport" defaultChecked={payment?.isTransport ?? false} />
-              <div>
-                <span className="font-medium">交通費として登録</span>
-                <p className="text-muted-foreground text-sm">
-                  チェックするとShapley値による公平な分配が適用されます（ガソリン代、高速代など）
-                </p>
-              </div>
-            </label>
+            <Label>交通費の種類</Label>
+            <div className="space-y-2">
+              <label className="hover:bg-accent flex cursor-pointer items-center gap-3 rounded-lg border p-4">
+                <Checkbox name="isTransport" defaultChecked={payment?.isTransport ?? false} />
+                <div>
+                  <span className="font-medium">ガソリン代（交通費）</span>
+                  <p className="text-muted-foreground text-sm">
+                    Shapley値による公平な分配が適用されます
+                  </p>
+                </div>
+              </label>
+              <label className="hover:bg-accent flex cursor-pointer items-center gap-3 rounded-lg border p-4">
+                <Checkbox name="isHighway" defaultChecked={payment?.isHighway ?? false} />
+                <div>
+                  <span className="font-medium">高速代（交通費）</span>
+                  <p className="text-muted-foreground text-sm">
+                    Shapley値で分配されますが、燃費計算からは除外されます
+                  </p>
+                </div>
+              </label>
+            </div>
             {state.error?.isTransport && (
               <p className="text-sm text-red-500">{state.error.isTransport[0]}</p>
             )}

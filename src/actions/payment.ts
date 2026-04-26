@@ -26,12 +26,16 @@ export async function createPayment(formData: FormData): Promise<ActionResult | 
   const isTransportRaw = formData.get("isTransport");
   const isTransport = isTransportRaw === "true" || isTransportRaw === "on";
 
+  const isHighwayRaw = formData.get("isHighway");
+  const isHighway = isHighwayRaw === "true" || isHighwayRaw === "on";
+
   const validatedFields = createPaymentSchema.safeParse({
     eventId: formData.get("eventId"),
     payerId: formData.get("payerId"),
     amount: isNaN(amount) ? 0 : amount,
     description: formData.get("description"),
-    isTransport,
+    isTransport: isTransport || isHighway, // 高速代も交通費として扱う
+    isHighway,
     beneficiaryIds: beneficiaryIds.filter((id): id is string => typeof id === "string"),
   });
 
@@ -60,6 +64,7 @@ export async function createPayment(formData: FormData): Promise<ActionResult | 
       amount: data.amount,
       description: data.description,
       isTransport: data.isTransport,
+      isHighway: data.isHighway,
       beneficiaries: {
         create: data.beneficiaryIds.map((memberId) => ({
           memberId,
@@ -88,12 +93,16 @@ export async function updatePayment(formData: FormData): Promise<ActionResult> {
   const isTransportRaw = formData.get("isTransport");
   const isTransport = isTransportRaw === "true" || isTransportRaw === "on";
 
+  const isHighwayRaw = formData.get("isHighway");
+  const isHighway = isHighwayRaw === "true" || isHighwayRaw === "on";
+
   const validatedFields = updatePaymentSchema.safeParse({
     id: formData.get("id"),
     payerId: formData.get("payerId"),
     amount: isNaN(amount) ? 0 : amount,
     description: formData.get("description"),
-    isTransport,
+    isTransport: isTransport || isHighway, // 高速代も交通費として扱う
+    isHighway,
     beneficiaryIds: beneficiaryIds.filter((id): id is string => typeof id === "string"),
   });
 
@@ -136,6 +145,7 @@ export async function updatePayment(formData: FormData): Promise<ActionResult> {
         amount: data.amount,
         description: data.description,
         isTransport: data.isTransport,
+        isHighway: data.isHighway,
         payerId,
         beneficiaries: {
           create: newBeneficiaryIds.map((memberId) => ({

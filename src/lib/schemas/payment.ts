@@ -6,6 +6,7 @@ export const createPaymentSchema = z.object({
   amount: z.number().int().min(1, "金額は1円以上で入力してください").max(10000000),
   description: z.string().min(1, "説明は必須です").max(200),
   isTransport: z.boolean().default(false), // 交通費フラグ（Shapley値で分配）
+  isHighway: z.boolean().default(false), // 高速代フラグ（燃費計算から除外）
   beneficiaryIds: z.array(z.string().uuid()).min(1, "受益者を1人以上選択してください"),
 });
 
@@ -15,6 +16,7 @@ export const updatePaymentSchema = z.object({
   amount: z.number().int().min(1, "金額は1円以上で入力してください").max(10000000),
   description: z.string().min(1, "説明は必須です").max(200),
   isTransport: z.boolean().default(false), // 交通費フラグ（Shapley値で分配）
+  isHighway: z.boolean().default(false), // 高速代フラグ（燃費計算から除外）
   beneficiaryIds: z.array(z.string().uuid()).min(1, "受益者を1人以上選択してください"),
 });
 
