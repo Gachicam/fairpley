@@ -235,3 +235,30 @@ model PaymentBeneficiary {
   @@index([paymentId])
   @@index([memberId])
 }
+
+// ============================================
+// 距離キャッシュ（Google Routes API呼び出し削減用）
+// ============================================
+
+model DistanceCache {
+  id String @id @default(uuid(7))
+
+  // 出発地の緯度経度（小数点4桁で丸めてキー化）
+  fromLat Float
+  fromLng Float
+
+  // 目的地の緯度経度
+  toLat Float
+  toLng Float
+
+  // 計算結果
+  distanceKm  Float
+  durationMin Int
+
+  createdAt DateTime @default(now())
+
+  // 緯度経度の組み合わせでユニーク
+  @@unique([fromLat, fromLng, toLat, toLng])
+  @@index([fromLat, fromLng])
+  @@index([toLat, toLng])
+}

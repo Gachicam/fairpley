@@ -1,4 +1,5 @@
 import { calculateDistance } from "./google-maps";
+import { prisma } from "./prisma";
 
 interface Location {
   lat: number;
@@ -6,30 +7,124 @@ interface Location {
 }
 
 /**
- * 2点間の距離をキャッシュするためのMap
- * キー: `${lat1},${lng1}-${lat2},${lng2}`
+ * 緯度経度を丸める（小数点4桁 ≒ 約11m精度）
  */
-const distanceCache = new Map<string, number>();
+function roundCoord(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
+// メモリ内キャッシュ（DBキャッシュが使えない場合のフォールバック）
+const memoryCache = new Map<string, number>();
 
 /**
- * 2点間の距離を取得（キャッシュ付き）
+ * DBキャッシュから距離を取得
+ */
+async function getDistanceFromDb(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number
+): Promise<number | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = prisma as any;
+    if (!db?.distanceCache) {
+      return null;
+    }
+
+    const cached = await db.distanceCache.findUnique({
+      where: {
+        fromLat_fromLng_toLat_toLng: { fromLat, fromLng, toLat, toLng },
+      },
+    });
+
+    if (cached) {
+      return cached.distanceKm;
+    }
+
+    // 逆方向もチェック
+    const reverseCached = await db.distanceCache.findUnique({
+      where: {
+        fromLat_fromLng_toLat_toLng: {
+          fromLat: toLat,
+          fromLng: toLng,
+          toLat: fromLat,
+          toLng: fromLng,
+        },
+      },
+    });
+
+    if (reverseCached) {
+      return reverseCached.distanceKm;
+    }
+
+    return null;
+  } catch {
+    // DBキャッシュが使えない場合はnullを返す
+    return null;
+  }
+}
+
+/**
+ * DBキャッシュに距離を保存
+ */
+async function saveDistanceToDb(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number,
+  distanceKm: number,
+  durationMin: number
+): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = prisma as any;
+    if (!db?.distanceCache) {
+      return;
+    }
+
+    await db.distanceCache.create({
+      data: { fromLat, fromLng, toLat, toLng, distanceKm, durationMin },
+    });
+  } catch {
+    // ユニーク制約違反や他のエラーは無視
+  }
+}
+
+/**
+ * 2点間の距離を取得（DB永続化キャッシュ付き）
  */
 async function getDistance(from: Location, to: Location): Promise<number> {
-  const cacheKey = `${from.lat},${from.lng}-${to.lat},${to.lng}`;
-  const reverseCacheKey = `${to.lat},${to.lng}-${from.lat},${from.lng}`;
+  const fromLat = roundCoord(from.lat);
+  const fromLng = roundCoord(from.lng);
+  const toLat = roundCoord(to.lat);
+  const toLng = roundCoord(to.lng);
 
-  // キャッシュチェック
-  const cached = distanceCache.get(cacheKey) ?? distanceCache.get(reverseCacheKey);
-  if (cached !== undefined) {
-    return cached;
+  // メモリキャッシュのキー
+  const cacheKey = `${fromLat},${fromLng}-${toLat},${toLng}`;
+  const reverseCacheKey = `${toLat},${toLng}-${fromLat},${fromLng}`;
+
+  // 1. メモリキャッシュを確認
+  const memoryCached = memoryCache.get(cacheKey) ?? memoryCache.get(reverseCacheKey);
+  if (memoryCached !== undefined) {
+    return memoryCached;
   }
 
-  // API呼び出し
+  // 2. DBキャッシュを確認
+  const dbCached = await getDistanceFromDb(fromLat, fromLng, toLat, toLng);
+  if (dbCached !== null) {
+    memoryCache.set(cacheKey, dbCached);
+    return dbCached;
+  }
+
+  // 3. API呼び出し
   const result = await calculateDistance(from, to);
   const distanceKm = result?.distanceKm ?? 0;
+  const durationMin = result?.durationMinutes ?? 0;
 
-  // キャッシュに保存
-  distanceCache.set(cacheKey, distanceKm);
+  // 4. キャッシュに保存
+  memoryCache.set(cacheKey, distanceKm);
+  await saveDistanceToDb(fromLat, fromLng, toLat, toLng, distanceKm, durationMin);
 
   return distanceKm;
 }
@@ -90,11 +185,4 @@ export async function calculateOptimalRoute(
   totalDistance += returnDist;
 
   return totalDistance;
-}
-
-/**
- * 距離キャッシュをクリア
- */
-export function clearDistanceCache(): void {
-  distanceCache.clear();
 }

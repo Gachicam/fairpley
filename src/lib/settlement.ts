@@ -1,6 +1,6 @@
 import { Set as ImmutableSet } from "shapley/node_modules/immutable";
 import { shapley as calculateShapley } from "shapley";
-import { calculateOptimalRoute, clearDistanceCache } from "./route";
+import { calculateOptimalRoute } from "./route";
 
 // ============================================
 // 型定義
@@ -242,9 +242,6 @@ async function computeShapleyValues(
  * 清算を計算する（Shapley値対応版）
  */
 export async function calculateSettlement(event: Event): Promise<SettlementResult> {
-  // キャッシュをクリア
-  clearDistanceCache();
-
   const members = event.members;
   const memberMap = new Map(members.map((m) => [m.id, m]));
   const userIdToMemberIdMap = new Map(members.map((m) => [m.userId, m.id]));
