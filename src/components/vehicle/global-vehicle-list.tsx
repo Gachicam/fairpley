@@ -31,6 +31,8 @@ interface Vehicle {
   id: string;
   name: string;
   type: string;
+  vehicleClass: string;
+  hasEtc: boolean;
   capacity: number;
   fuelEfficiency: number | null;
 }

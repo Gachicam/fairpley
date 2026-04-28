@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getEventById, getEventForSettlement } from "@/data/event";
-import { calculateSettlement, calculateSimpleSettlement } from "@/lib/settlement";
+import { calculateSettlement, calculateSimpleSettlement, type MissingTollCoalition } from "@/lib/settlement";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface PageProps {
   params: Promise<{ eventId: string }>;
@@ -32,14 +37,21 @@ export default async function SettlementPage({ params }: PageProps): Promise<Rea
     id: eventForSettlement.id,
     gasPricePerLiter: eventForSettlement.gasPricePerLiter,
     destination: eventForSettlement.destination,
+    outboundDate: eventForSettlement.outboundDate,
+    returnDate: eventForSettlement.returnDate,
+    checkinTime: eventForSettlement.checkinTime,
+    checkoutTime: eventForSettlement.checkoutTime,
     members: eventForSettlement.members.map((m) => ({
       id: m.id,
       userId: m.userId,
       nickname: m.nickname,
+      loadingMinutes: m.loadingMinutes,
       departureLocation: m.departureLocation,
       vehicles: m.vehicles.map((v) => ({
         id: v.id,
         type: v.type as "OWNED" | "RENTAL" | "CARSHARE" | "BIKE",
+        vehicleClass: v.vehicleClass as "LIGHT" | "STANDARD" | "MEDIUM" | "LARGE" | "EXTRA",
+        hasEtc: v.hasEtc,
         capacity: v.capacity,
         fuelEfficiency: v.fuelEfficiency,
       })),
@@ -92,6 +104,7 @@ export default async function SettlementPage({ params }: PageProps): Promise<Rea
         ...calculateSimpleSettlement(payments, members),
         shapleyValues: [],
         transportCost: 0,
+        missingTollCoalitions: [],
       };
     }
   } else {
@@ -112,6 +125,7 @@ export default async function SettlementPage({ params }: PageProps): Promise<Rea
       ...calculateSimpleSettlement(payments, members),
       shapleyValues: [],
       transportCost: 0,
+      missingTollCoalitions: [],
     };
   }
 
@@ -204,6 +218,44 @@ export default async function SettlementPage({ params }: PageProps): Promise<Rea
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 高速料金データ欠損の警告 */}
+      {useShapley && settlement.missingTollCoalitions && settlement.missingTollCoalitions.length > 0 && (
+        <Card className="mt-6 border-amber-200 bg-amber-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-amber-800 text-base">
+              ⚠️ 一部の連合で高速料金データが取得できませんでした
+            </CardTitle>
+            <CardDescription className="text-amber-700">
+              該当する連合の高速料金は 0 円として計算されています。実際の費用と異なる場合があります。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Collapsible>
+              <CollapsibleTrigger className="text-amber-800 text-sm underline underline-offset-2">
+                詳細を表示（{settlement.missingTollCoalitions.length}件）
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3">
+                <div className="space-y-2">
+                  {(settlement.missingTollCoalitions as MissingTollCoalition[]).map((c) => (
+                    <div
+                      key={c.coalitionKey}
+                      className="rounded border border-amber-200 bg-white px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium text-amber-900">
+                        [{c.memberNames.join(", ")}]
+                      </span>
+                      <span className="text-amber-700 ml-2">
+                        計算値: ¥{c.calculatedValue.toLocaleString()}（高速代 0 円として算出）
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </CardContent>
         </Card>
       )}

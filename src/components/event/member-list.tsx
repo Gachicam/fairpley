@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { removeMember, updateDepartureLocation } from "@/actions/member";
+import { removeMember, updateDepartureLocation, updateMemberLoadingMinutes } from "@/actions/member";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -33,6 +34,7 @@ interface Member {
   id: string;
   userId: string;
   nickname: string | null;
+  loadingMinutes: number;
   departureLocation: Location | null;
   user: {
     id: string;
@@ -60,6 +62,7 @@ export function MemberList({
 }: MemberListProps): React.ReactElement {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [updatingLoadingId, setUpdatingLoadingId] = useState<string | null>(null);
 
   const handleRemove = async (memberId: string): Promise<void> => {
     setRemovingId(memberId);
@@ -93,6 +96,20 @@ export function MemberList({
   const getInitials = (member: Member): string => {
     const name = getDisplayName(member);
     return name.substring(0, 2).toUpperCase();
+  };
+
+  const handleLoadingMinutesChange = async (
+    memberId: string,
+    minutes: number
+  ): Promise<void> => {
+    setUpdatingLoadingId(memberId);
+    try {
+      await updateMemberLoadingMinutes(eventId, memberId, minutes);
+    } catch (error) {
+      console.error("Failed to update loading minutes:", error);
+    } finally {
+      setUpdatingLoadingId(null);
+    }
   };
 
   const getDepartureLocationName = (member: Member): string | null => {
@@ -193,6 +210,28 @@ export function MemberList({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            {/* 荷積み時間 */}
+            <div className="flex items-center gap-2 pl-11">
+              <span className="text-muted-foreground text-xs">荷積み時間:</span>
+              <Input
+                type="number"
+                min={0}
+                max={120}
+                defaultValue={member.loadingMinutes}
+                disabled={updatingLoadingId === member.id}
+                className="h-7 w-20 text-xs"
+                onBlur={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val) && val !== member.loadingMinutes) {
+                    void handleLoadingMinutesChange(member.id, val);
+                  }
+                }}
+              />
+              <span className="text-muted-foreground text-xs">分</span>
+              {updatingLoadingId === member.id && (
+                <span className="text-muted-foreground text-xs">更新中...</span>
+              )}
             </div>
           </div>
         );

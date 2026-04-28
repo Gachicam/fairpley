@@ -69,7 +69,7 @@
     "@typescript-eslint/parser": "^8.51.0",
     "@vitejs/plugin-react": "^5.1.2",
     "concurrently": "^9.2.1",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "eslint-config-prettier": "^10.1.8",

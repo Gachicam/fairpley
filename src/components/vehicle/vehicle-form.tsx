@@ -12,7 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { vehicleTypeLabels, type VehicleType } from "@/lib/schemas/vehicle";
+import {
+  vehicleTypeLabels,
+  vehicleClassLabels,
+  type VehicleType,
+  type VehicleClass,
+} from "@/lib/schemas/vehicle";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Member {
   id: string;
@@ -24,6 +30,8 @@ interface Vehicle {
   id: string;
   name: string;
   type: string;
+  vehicleClass: string;
+  hasEtc: boolean;
   ownerId: string | null;
   capacity: number;
   fuelEfficiency: number | null;
@@ -46,6 +54,7 @@ export function VehicleForm({
   const [vehicleType, setVehicleType] = useState<VehicleType>(
     vehicle ? (vehicle.type as VehicleType) : "OWNED"
   );
+  const [hasEtc, setHasEtc] = useState<boolean>(vehicle?.hasEtc ?? true);
   const isBike = vehicleType === "BIKE";
 
   const action = async (
@@ -107,6 +116,41 @@ export function VehicleForm({
           </p>
         )}
         {state.error?.type && <p className="text-destructive text-sm">{state.error.type[0]}</p>}
+      </div>
+
+      {!isBike && (
+        <div className="space-y-2">
+          <Label htmlFor="vehicleClass">車種区分</Label>
+          <Select
+            name="vehicleClass"
+            defaultValue={(vehicle?.vehicleClass as VehicleClass) ?? "STANDARD"}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="車種区分を選択" />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.entries(vehicleClassLabels) as [VehicleClass, string][]).map(
+                ([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                )
+              )}
+            </SelectContent>
+          </Select>
+          <p className="text-muted-foreground text-xs">高速料金の計算に使用されます</p>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="hasEtc"
+          checked={hasEtc}
+          onCheckedChange={(checked) => setHasEtc(checked === true)}
+        />
+        <input type="hidden" name="hasEtc" value={hasEtc ? "true" : "false"} />
+        <Label htmlFor="hasEtc">ETC搭載</Label>
+        <span className="text-muted-foreground text-xs">（ETC割引の計算に使用）</span>
       </div>
 
       <div className="space-y-2">

@@ -6,19 +6,23 @@ import { createEventSchema, updateEventSchema } from "@/lib/schemas/event";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-// 戻り値の型定義
 interface ActionResult {
   error?: Record<string, string[]>;
 }
 
-/**
- * イベント作成
- */
+/** HH:MM 文字列を分（0-1439）に変換。無効な場合は null */
+function timeStringToMinutes(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string" || !value) return null;
+  const [h, m] = value.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  const minutes = h * 60 + m;
+  if (minutes < 0 || minutes > 1439) return null;
+  return minutes;
+}
+
 export async function createEvent(formData: FormData): Promise<ActionResult | never> {
   const session = await auth();
-  if (!session) {
-    throw new Error("認証が必要です");
-  }
+  if (!session) throw new Error("認証が必要です");
 
   const validatedFields = createEventSchema.safeParse({
     name: formData.get("name"),
@@ -38,12 +42,7 @@ export async function createEvent(formData: FormData): Promise<ActionResult | ne
       startDate,
       endDate,
       ownerId: session.user.id,
-      members: {
-        create: {
-          userId: session.user.id,
-          // オーナーは自動的に参加者になる
-        },
-      },
+      members: { create: { userId: session.user.id } },
     },
   });
 
@@ -51,14 +50,9 @@ export async function createEvent(formData: FormData): Promise<ActionResult | ne
   redirect(`/events/${event.id}`);
 }
 
-/**
- * イベント更新
- */
 export async function updateEvent(formData: FormData): Promise<ActionResult> {
   const session = await auth();
-  if (!session) {
-    throw new Error("認証が必要です");
-  }
+  if (!session) throw new Error("認証が必要です");
 
   const gasPriceRaw = formData.get("gasPricePerLiter");
   const gasPricePerLiter = typeof gasPriceRaw === "string" ? parseInt(gasPriceRaw, 10) : 170;
@@ -68,6 +62,9 @@ export async function updateEvent(formData: FormData): Promise<ActionResult> {
       ? destinationIdRaw
       : null;
 
+  const outboundDateRaw = formData.get("outboundDate");
+  const returnDateRaw = formData.get("returnDate");
+
   const validatedFields = updateEventSchema.safeParse({
     id: formData.get("id"),
     name: formData.get("name"),
@@ -75,6 +72,12 @@ export async function updateEvent(formData: FormData): Promise<ActionResult> {
     endDate: formData.get("endDate"),
     gasPricePerLiter: isNaN(gasPricePerLiter) ? 170 : gasPricePerLiter,
     destinationId,
+    outboundDate:
+      typeof outboundDateRaw === "string" && outboundDateRaw ? outboundDateRaw : null,
+    returnDate:
+      typeof returnDateRaw === "string" && returnDateRaw ? returnDateRaw : null,
+    checkinTime: timeStringToMinutes(formData.get("checkinTime")),
+    checkoutTime: timeStringToMinutes(formData.get("checkoutTime")),
   });
 
   if (!validatedFields.success) {
@@ -83,7 +86,6 @@ export async function updateEvent(formData: FormData): Promise<ActionResult> {
 
   const { id, ...data } = validatedFields.data;
 
-  // オーナーのみ更新可能
   const event = await prisma.event.findUnique({
     where: { id },
     select: { ownerId: true },
@@ -93,43 +95,28 @@ export async function updateEvent(formData: FormData): Promise<ActionResult> {
     throw new Error("イベントの更新権限がありません");
   }
 
-  await prisma.event.update({
-    where: { id },
-    data,
-  });
+  await prisma.event.update({ where: { id }, data });
 
   revalidatePath(`/events/${id}`);
   return {};
 }
 
-/**
- * イベント削除（管理者のみ）
- */
 export async function deleteEvent(eventId: string): Promise<never> {
   const session = await auth();
-  if (!session) {
-    throw new Error("認証が必要です");
-  }
+  if (!session) throw new Error("認証が必要です");
 
-  // 管理者のみ削除可能
   if (session.user.role !== "ADMIN") {
     throw new Error("イベントの削除権限がありません");
   }
 
-  // イベントの存在確認
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: { id: true },
   });
 
-  if (!event) {
-    throw new Error("イベントが見つかりません");
-  }
+  if (!event) throw new Error("イベントが見つかりません");
 
-  // カスケード削除（関連データも削除）
-  await prisma.event.delete({
-    where: { id: eventId },
-  });
+  await prisma.event.delete({ where: { id: eventId } });
 
   revalidatePath("/");
   redirect("/");

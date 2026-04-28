@@ -159,6 +159,24 @@ export function AddMemberForm({ eventId }: AddMemberFormProps): React.ReactEleme
             )}
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="loadingMinutes">荷積み時間（分）</Label>
+            <Input
+              id="loadingMinutes"
+              name="loadingMinutes"
+              type="number"
+              min={0}
+              max={120}
+              defaultValue={15}
+            />
+            <p className="text-muted-foreground text-xs">
+              この参加者を経由する際の停車時間（高速料金の時間帯計算に使用）
+            </p>
+            {state.error?.loadingMinutes && (
+              <p className="text-sm text-red-500">{state.error.loadingMinutes[0]}</p>
+            )}
+          </div>
+
           <Button type="submit" size="sm" disabled={isPending || !selectedUser}>
             {isPending ? "追加中..." : "追加"}
           </Button>

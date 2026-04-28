@@ -2,7 +2,11 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { addMemberSchema, addMemberByUserIdSchema } from "@/lib/schemas/member";
+import {
+  addMemberSchema,
+  addMemberByUserIdSchema,
+  updateMemberLoadingMinutesSchema,
+} from "@/lib/schemas/member";
 import { revalidatePath } from "next/cache";
 
 // 戻り値の型定義
@@ -20,17 +24,22 @@ export async function addMember(formData: FormData): Promise<ActionResult> {
   }
 
   const nicknameValue = formData.get("nickname");
+  const loadingMinutesRaw = formData.get("loadingMinutes");
   const validatedFields = addMemberSchema.safeParse({
     eventId: formData.get("eventId"),
     email: formData.get("email"),
     nickname: typeof nicknameValue === "string" && nicknameValue ? nicknameValue : undefined,
+    loadingMinutes:
+      typeof loadingMinutesRaw === "string" && loadingMinutesRaw
+        ? parseInt(loadingMinutesRaw, 10)
+        : 15,
   });
 
   if (!validatedFields.success) {
     return { error: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { eventId, email, nickname } = validatedFields.data;
+  const { eventId, email, nickname, loadingMinutes } = validatedFields.data;
 
   // イベントへのアクセス権チェック
   const event = await prisma.event.findFirst({
@@ -73,6 +82,7 @@ export async function addMember(formData: FormData): Promise<ActionResult> {
       eventId,
       userId: user.id,
       nickname,
+      loadingMinutes,
     },
   });
 
@@ -150,17 +160,22 @@ export async function addMemberByUserId(formData: FormData): Promise<ActionResul
   }
 
   const nicknameValue = formData.get("nickname");
+  const loadingMinutesRaw = formData.get("loadingMinutes");
   const validatedFields = addMemberByUserIdSchema.safeParse({
     eventId: formData.get("eventId"),
     userId: formData.get("userId"),
     nickname: typeof nicknameValue === "string" && nicknameValue ? nicknameValue : undefined,
+    loadingMinutes:
+      typeof loadingMinutesRaw === "string" && loadingMinutesRaw
+        ? parseInt(loadingMinutesRaw, 10)
+        : 15,
   });
 
   if (!validatedFields.success) {
     return { error: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { eventId, userId, nickname } = validatedFields.data;
+  const { eventId, userId, nickname, loadingMinutes } = validatedFields.data;
 
   // イベントへのアクセス権チェック
   const event = await prisma.event.findFirst({
@@ -199,6 +214,7 @@ export async function addMemberByUserId(formData: FormData): Promise<ActionResul
       eventId,
       userId,
       nickname,
+      loadingMinutes,
     },
   });
 
@@ -254,6 +270,39 @@ export async function removeMember(eventId: string, memberId: string): Promise<v
 
   await prisma.eventMember.delete({
     where: { id: memberId },
+  });
+
+  revalidatePath(`/events/${eventId}`);
+}
+
+/**
+ * 参加者の荷積み時間を更新
+ */
+export async function updateMemberLoadingMinutes(
+  eventId: string,
+  memberId: string,
+  loadingMinutes: number
+): Promise<void> {
+  const session = await auth();
+  if (!session) throw new Error("認証が必要です");
+
+  const validatedFields = updateMemberLoadingMinutesSchema.safeParse({
+    memberId,
+    eventId,
+    loadingMinutes,
+  });
+
+  if (!validatedFields.success) throw new Error("入力値が不正です");
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, members: { some: { userId: session.user.id } } },
+  });
+
+  if (!event) throw new Error("イベントが見つかりません");
+
+  await prisma.eventMember.update({
+    where: { id: memberId },
+    data: { loadingMinutes },
   });
 
   revalidatePath(`/events/${eventId}`);

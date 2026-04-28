@@ -4,12 +4,14 @@ export const addMemberSchema = z.object({
   eventId: z.string().uuid(),
   email: z.string().email("有効なメールアドレスを入力してください"),
   nickname: z.string().max(50).optional(),
+  loadingMinutes: z.number().int().min(0).max(120).default(15),
 });
 
 export const addMemberByUserIdSchema = z.object({
   eventId: z.string().uuid(),
   userId: z.string().uuid(),
   nickname: z.string().max(50).optional(),
+  loadingMinutes: z.number().int().min(0).max(120).default(15),
 });
 
 export const updateDepartureLocationSchema = z.object({
@@ -18,6 +20,13 @@ export const updateDepartureLocationSchema = z.object({
   departureLocationId: z.string().uuid().nullable(),
 });
 
+export const updateMemberLoadingMinutesSchema = z.object({
+  memberId: z.string().uuid(),
+  eventId: z.string().uuid(),
+  loadingMinutes: z.number().int().min(0).max(120),
+});
+
 export type AddMemberInput = z.infer<typeof addMemberSchema>;
 export type AddMemberByUserIdInput = z.infer<typeof addMemberByUserIdSchema>;
 export type UpdateDepartureLocationInput = z.infer<typeof updateDepartureLocationSchema>;
+export type UpdateMemberLoadingMinutesInput = z.infer<typeof updateMemberLoadingMinutesSchema>;

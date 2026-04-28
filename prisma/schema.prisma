@@ -89,11 +89,17 @@ model VerificationToken {
 // ============================================
 
 model Event {
-  id               String   @id @default(uuid(7))
-  name             String   @db.VarChar(100)
+  id               String    @id @default(uuid(7))
+  name             String    @db.VarChar(100)
   startDate        DateTime
   endDate          DateTime
-  gasPricePerLiter Int      @default(170) // ガソリン単価（円/L）
+  gasPricePerLiter Int       @default(170) // ガソリン単価（円/L）
+
+  // 往路・復路の移動日付と時刻（toll計算用）
+  outboundDate  DateTime? // 往路の日付（日付部分のみ使用）
+  returnDate    DateTime? // 復路の日付（日付部分のみ使用）
+  checkinTime   Int?      // チェックイン時刻（0-1439分）
+  checkoutTime  Int?      // チェックアウト時刻（0-1439分）
 
   ownerId String
   owner   User   @relation("EventOwner", fields: [ownerId], references: [id], onDelete: Cascade)
@@ -115,10 +121,11 @@ model Event {
 }
 
 model EventMember {
-  id       String  @id @default(uuid(7))
-  eventId  String
-  userId   String
-  nickname String? @db.VarChar(50)
+  id             String  @id @default(uuid(7))
+  eventId        String
+  userId         String
+  nickname       String? @db.VarChar(50)
+  loadingMinutes Int     @default(15) // 各経由地での荷積み・荷降ろし時間（分）
 
   // イベントでの出発地（未設定ならUser.homeLocationを使用）
   departureLocationId String?
@@ -163,11 +170,13 @@ enum LocationType {
 }
 
 model Vehicle {
-  id             String      @id @default(uuid(7))
-  name           String      @db.VarChar(100)
+  id             String       @id @default(uuid(7))
+  name           String       @db.VarChar(100)
   type           VehicleType
+  vehicleClass   VehicleClass @default(STANDARD) // 高速料金計算用の車種区分
+  hasEtc         Boolean      @default(true)      // ETC搭載有無
   ownerId        String?
-  capacity       Int         @db.SmallInt
+  capacity       Int          @db.SmallInt
   fuelEfficiency Float?
 
   owner EventMember? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
@@ -183,6 +192,14 @@ enum VehicleType {
   RENTAL   // レンタカー
   CARSHARE // カーシェア
   BIKE     // バイク（Shapley計算から除外）
+}
+
+enum VehicleClass {
+  LIGHT    // 軽自動車・二輪車
+  STANDARD // 普通車
+  MEDIUM   // 中型車
+  LARGE    // 大型車
+  EXTRA    // 特大車
 }
 
 model RentalOption {

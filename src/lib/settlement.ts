@@ -1,6 +1,7 @@
 import { Set as ImmutableSet } from "shapley/node_modules/immutable";
 import { shapley as calculateShapley } from "shapley";
-import { calculateOptimalRoute, clearDistanceCache } from "./route";
+import { calculateOptimalRoute, clearRouteCache, type TollOptions } from "./route";
+import type { VehicleClass } from "./schemas/vehicle";
 
 // ============================================
 // 型定義
@@ -23,6 +24,8 @@ interface Payment {
 interface Vehicle {
   id: string;
   type: "OWNED" | "RENTAL" | "CARSHARE" | "BIKE";
+  vehicleClass: VehicleClass;
+  hasEtc: boolean;
   capacity: number;
   fuelEfficiency: number | null;
 }
@@ -31,6 +34,7 @@ interface Member {
   id: string;
   userId: string;
   nickname: string | null;
+  loadingMinutes: number;
   departureLocation: Location | null;
   vehicles: Vehicle[];
   user: {
@@ -45,6 +49,10 @@ interface Event {
   id: string;
   gasPricePerLiter: number;
   destination: Location | null;
+  outboundDate: Date | null;
+  returnDate: Date | null;
+  checkinTime: number | null;  // 分（0-1439）
+  checkoutTime: number | null; // 分（0-1439）
   members: Member[];
   payments: Payment[];
 }
@@ -70,12 +78,19 @@ interface ShapleyValue {
   value: number;
 }
 
+export interface MissingTollCoalition {
+  memberNames: string[];
+  coalitionKey: string;
+  calculatedValue: number;
+}
+
 export interface SettlementResult {
   balances: MemberBalance[];
   transfers: Transfer[];
   shapleyValues: ShapleyValue[];
   totalAmount: number;
   transportCost: number;
+  missingTollCoalitions: MissingTollCoalition[];
 }
 
 // ============================================
@@ -94,203 +109,255 @@ function isBikeMember(member: Member): boolean {
   return member.vehicles.some((v) => v.type === "BIKE");
 }
 
-/**
- * 車で移動できる手段を持つか（OWNED, RENTAL, CARSHARE）
- * 連合が車で移動可能かの判定に使用
- */
 function hasCarAccess(member: Member): boolean {
   return member.vehicles.some((v) => v.type !== "BIKE");
 }
 
-/**
- * 自家用車を持つか（OWNED のみ）
- * 「車を出した貢献」として負担軽減の対象
- */
 function isOwnedCarOwner(member: Member): boolean {
   return member.vehicles.some((v) => v.type === "OWNED");
 }
 
+/** 連合内で使用する最良の自家用車を返す（燃費が最高の OWNED 車） */
+function getBestOwnedCar(coalition: string[], memberMap: Map<string, Member>): Vehicle | null {
+  let best: Vehicle | null = null;
+  for (const id of coalition) {
+    const member = memberMap.get(id);
+    if (!member) continue;
+    for (const v of member.vehicles) {
+      if (v.type !== "OWNED") continue;
+      if (!best || (v.fuelEfficiency ?? 0) > (best.fuelEfficiency ?? 0)) {
+        best = v;
+      }
+    }
+  }
+  return best;
+}
+
+/** 連合内に ETC 搭載車があるか */
+function coalitionHasEtc(coalition: string[], memberMap: Map<string, Member>): boolean {
+  for (const id of coalition) {
+    const member = memberMap.get(id);
+    if (!member) continue;
+    if (member.vehicles.some((v) => v.hasEtc && v.type !== "BIKE")) return true;
+  }
+  return false;
+}
+
 // ============================================
-// Shapley値計算
+// toll 計算オプション構築
 // ============================================
 
-/**
- * 特性関数v(S)を計算するための準備
- * 連合Sに対して、交通費コストを返す
- */
+function buildTollOptions(
+  event: Event,
+  direction: "OUTBOUND" | "RETURN",
+  coalition: string[],
+  memberMap: Map<string, Member>,
+  vehicleClass: VehicleClass,
+  hasEtc: boolean
+): TollOptions | undefined {
+  if (direction === "OUTBOUND") {
+    if (!event.outboundDate || event.checkinTime === null) return undefined;
+    const loadingMinutesPerStop = coalition.map(
+      (id) => memberMap.get(id)?.loadingMinutes ?? 15
+    );
+    return {
+      direction: "OUTBOUND",
+      anchorDate: event.outboundDate,
+      anchorTimeMinutes: event.checkinTime,
+      loadingMinutesPerStop,
+      vehicleClass,
+      hasEtc,
+    };
+  } else {
+    if (!event.returnDate || event.checkoutTime === null) return undefined;
+    const loadingMinutesPerStop = coalition.map(
+      (id) => memberMap.get(id)?.loadingMinutes ?? 15
+    );
+    return {
+      direction: "RETURN",
+      anchorDate: event.returnDate,
+      anchorTimeMinutes: event.checkoutTime,
+      loadingMinutesPerStop,
+      vehicleClass,
+      hasEtc,
+    };
+  }
+}
+
+// ============================================
+// Shapley 値計算
+// ============================================
+
+interface CoalitionEntry {
+  value: number;
+  hasMissingToll: boolean;
+}
+
 async function buildCharacteristicFunction(
   event: Event,
   carRiderIds: string[],
   memberMap: Map<string, Member>,
-  effectiveFuelEfficiency: number,
-  highwayCost: number
-): Promise<Map<string, number>> {
-  const coalitionValues = new Map<string, number>();
-  // 自家用車を持つ人のみが「車を出した貢献」として扱われる
-  const ownedCarOwnerIds = new Set(event.members.filter((m) => isOwnedCarOwner(m)).map((m) => m.id));
+  effectiveFuelEfficiency: number
+): Promise<{ coalitionValues: Map<string, CoalitionEntry>; missingKeys: Set<string> }> {
+  const coalitionValues = new Map<string, CoalitionEntry>();
+  const missingKeys = new Set<string>();
+  const ownedCarOwnerIds = new Set(
+    event.members.filter((m) => isOwnedCarOwner(m)).map((m) => m.id)
+  );
 
-  // 全部分集合について特性関数を計算
   const n = carRiderIds.length;
   for (let mask = 0; mask < 1 << n; mask++) {
     const coalition: string[] = [];
     for (let i = 0; i < n; i++) {
-      if (mask & (1 << i)) {
-        coalition.push(carRiderIds[i]);
-      }
+      if (mask & (1 << i)) coalition.push(carRiderIds[i]);
     }
 
     const key = coalition.sort().join(",");
 
     if (coalition.length === 0) {
-      coalitionValues.set(key, 0);
+      coalitionValues.set(key, { value: 0, hasMissingToll: false });
       continue;
     }
 
-    // 連合に自家用車所有者がいるか
     const hasOwnedCarOwner = coalition.some((id) => ownedCarOwnerIds.has(id));
 
-    // 各メンバーの出発地を取得
     const departures: Location[] = [];
     for (const id of coalition) {
-      const member = memberMap.get(id);
-      if (member) {
-        const loc = getMemberDepartureLocation(member);
-        if (loc) {
-          departures.push(loc);
-        }
-      }
+      const loc = getMemberDepartureLocation(memberMap.get(id)!);
+      if (loc) departures.push(loc);
     }
 
     if (departures.length === 0 || !event.destination) {
-      coalitionValues.set(key, 0);
+      coalitionValues.set(key, { value: 0, hasMissingToll: false });
       continue;
     }
 
-    // 最短ルートを計算
-    const routeDistance = await calculateOptimalRoute(departures, event.destination);
+    // 車種・ETC を連合に基づいて決定
+    const bestCar = getBestOwnedCar(coalition, memberMap);
+    const vehicleClass: VehicleClass = bestCar?.vehicleClass ?? "STANDARD";
+    const hasEtc = coalitionHasEtc(coalition, memberMap);
 
-    // 高速代は全員で共有するため、連合サイズに比例して配分
-    const coalitionHighwayCost = (highwayCost * coalition.length) / carRiderIds.length;
+    // 往路・復路のルート計算
+    const outboundTollOpts = buildTollOptions(event, "OUTBOUND", coalition, memberMap, vehicleClass, hasEtc);
+    const returnTollOpts = buildTollOptions(event, "RETURN", coalition, memberMap, vehicleClass, hasEtc);
 
+    const outbound = await calculateOptimalRoute(departures, event.destination, outboundTollOpts);
+    const ret = await calculateOptimalRoute(departures, event.destination, returnTollOpts);
+
+    const totalDistanceKm = outbound.totalDistanceKm + ret.totalDistanceKm;
+    const totalTollJpy = outbound.totalTollJpy + ret.totalTollJpy;
+    const hasMissingToll = outbound.hasMissingToll || ret.hasMissingToll;
+
+    if (hasMissingToll) missingKeys.add(key);
+
+    let value: number;
     if (!hasOwnedCarOwner) {
-      // 自家用車がない場合はカーシェアを借りるコスト
-      // タイムズカーシェア 36時間パック: ¥12,000 + 距離料金 ¥16/km
       const carShareBaseFee = 12000;
       const carShareDistanceRate = 16;
-      const carShareCost = carShareBaseFee + routeDistance * carShareDistanceRate;
-      coalitionValues.set(key, carShareCost + coalitionHighwayCost);
-      continue;
+      value = carShareBaseFee + totalDistanceKm * carShareDistanceRate + totalTollJpy;
+    } else {
+      const gasCost = (totalDistanceKm / effectiveFuelEfficiency) * event.gasPricePerLiter;
+      value = gasCost + totalTollJpy;
     }
 
-    // 自家用車がある場合はガソリン代のみ
-    const gasPrice = event.gasPricePerLiter;
-    const gasCost = (routeDistance / effectiveFuelEfficiency) * gasPrice;
-    coalitionValues.set(key, gasCost + coalitionHighwayCost);
+    coalitionValues.set(key, { value, hasMissingToll });
   }
 
-  return coalitionValues;
+  return { coalitionValues, missingKeys };
 }
 
-/**
- * Shapley値を計算
- */
 async function computeShapleyValues(
   event: Event,
   carRiderIds: string[],
   memberMap: Map<string, Member>,
-  effectiveFuelEfficiency: number,
-  highwayCost: number
-): Promise<Map<string, number>> {
+  effectiveFuelEfficiency: number
+): Promise<{
+  shapleyMap: Map<string, number>;
+  missingTollCoalitions: MissingTollCoalition[];
+}> {
   if (carRiderIds.length === 0) {
-    return new Map();
+    return { shapleyMap: new Map(), missingTollCoalitions: [] };
   }
 
-  // 特性関数の値をプリ計算
-  const coalitionValues = await buildCharacteristicFunction(
+  const { coalitionValues, missingKeys } = await buildCharacteristicFunction(
     event,
     carRiderIds,
     memberMap,
-    effectiveFuelEfficiency,
-    highwayCost
+    effectiveFuelEfficiency
   );
 
-  // shapleyパッケージを使用
   const players = ImmutableSet(carRiderIds);
 
   const gainFunc = (S: ImmutableSet<string>): number => {
-    const coalition = S.toArray().sort();
-    const key = coalition.join(",");
-    const value = coalitionValues.get(key);
-    return value ?? 0;
+    const key = S.toArray().sort().join(",");
+    return coalitionValues.get(key)?.value ?? 0;
   };
 
   const shapleyFunc = calculateShapley(players, gainFunc);
-
-  const result = new Map<string, number>();
-  for (const playerId of carRiderIds) {
-    result.set(playerId, shapleyFunc(playerId));
+  const shapleyMap = new Map<string, number>();
+  for (const id of carRiderIds) {
+    shapleyMap.set(id, shapleyFunc(id));
   }
 
-  return result;
+  // 欠損連合を MissingTollCoalition に変換
+  const missingTollCoalitions: MissingTollCoalition[] = [];
+  for (const key of missingKeys) {
+    const memberIds = key === "" ? [] : key.split(",");
+    const memberNames = memberIds.map((id) => getMemberDisplayName(memberMap.get(id)!));
+    const entry = coalitionValues.get(key);
+    missingTollCoalitions.push({
+      memberNames,
+      coalitionKey: key,
+      calculatedValue: Math.round(entry?.value ?? 0),
+    });
+  }
+  missingTollCoalitions.sort((a, b) => a.memberNames.length - b.memberNames.length);
+
+  return { shapleyMap, missingTollCoalitions };
 }
 
 // ============================================
 // メイン計算関数
 // ============================================
 
-/**
- * 清算を計算する（Shapley値対応版）
- */
 export async function calculateSettlement(event: Event): Promise<SettlementResult> {
-  // キャッシュをクリア
-  clearDistanceCache();
+  clearRouteCache();
 
   const members = event.members;
   const memberMap = new Map(members.map((m) => [m.id, m]));
   const userIdToMemberIdMap = new Map(members.map((m) => [m.userId, m.id]));
 
-  // 1. 自家用車を出せる人がいるかチェック
   const ownedCarOwners = members.filter((m) => isOwnedCarOwner(m));
   if (ownedCarOwners.length === 0 && event.destination) {
     throw new Error("自家用車を出せる人がいません。車両情報を登録してください。");
   }
 
-  // 2. バイクの人と車に乗る人を分離
   const bikeMembers = members.filter((m) => isBikeMember(m));
   const bikeMemberIds = new Set(bikeMembers.map((m) => m.id));
   const carRiders = members.filter((m) => !isBikeMember(m));
   const carRiderIds = carRiders.map((m) => m.id);
 
-  // 3. 交通費の合計と高速代を計算
   const transportCost = event.payments
     .filter((p) => p.isTransport)
     .reduce((sum, p) => sum + p.amount, 0);
 
+  // 高速代は payments から抽出（effectiveFuelEfficiency の逆算に使用）
   const highwayCost = event.payments
     .filter((p) => p.isTransport && p.description.includes("高速"))
     .reduce((sum, p) => sum + p.amount, 0);
 
-  // 4. 実効燃費を計算（全員の連合での総距離から逆算）
-  let effectiveFuelEfficiency = 10; // デフォルト値
+  // 実効燃費を計算
+  let effectiveFuelEfficiency = 10;
   if (event.destination && carRiderIds.length > 0) {
-    // 全員の出発地を取得
     const allDepartures: Location[] = [];
     for (const id of carRiderIds) {
-      const member = memberMap.get(id);
-      if (member) {
-        const loc = getMemberDepartureLocation(member);
-        if (loc) {
-          allDepartures.push(loc);
-        }
-      }
+      const loc = getMemberDepartureLocation(memberMap.get(id)!);
+      if (loc) allDepartures.push(loc);
     }
 
     if (allDepartures.length > 0) {
-      // 全員の連合での総距離を計算
-      const totalDistance = await calculateOptimalRoute(allDepartures, event.destination);
-
-      // 実効燃費を逆算: ガソリン代 = (距離 / 燃費) × 単価
-      // よって: 燃費 = 距離 × 単価 / ガソリン代
+      const grand = await calculateOptimalRoute(allDepartures, event.destination);
+      const totalDistance = grand.totalDistanceKm;
       const gasCost = transportCost - highwayCost;
       if (gasCost > 0 && totalDistance > 0) {
         effectiveFuelEfficiency = (totalDistance * event.gasPricePerLiter) / gasCost;
@@ -298,25 +365,26 @@ export async function calculateSettlement(event: Event): Promise<SettlementResul
     }
   }
 
-  // 5. Shapley値を計算（目的地が設定されている場合のみ）
+  // Shapley 値計算
   let shapleyValues = new Map<string, number>();
+  let missingTollCoalitions: MissingTollCoalition[] = [];
   if (event.destination && carRiderIds.length > 0) {
-    shapleyValues = await computeShapleyValues(
+    const result = await computeShapleyValues(
       event,
       carRiderIds,
       memberMap,
-      effectiveFuelEfficiency,
-      highwayCost
+      effectiveFuelEfficiency
     );
+    shapleyValues = result.shapleyMap;
+    missingTollCoalitions = result.missingTollCoalitions;
   }
 
-  // 6. 各メンバーの残高を計算
+  // 残高計算
   const balanceMap = new Map<
     string,
     { paid: number; owed: number; userId: string; memberName: string }
   >();
 
-  // 初期化
   for (const member of members) {
     balanceMap.set(member.id, {
       paid: 0,
@@ -328,55 +396,37 @@ export async function calculateSettlement(event: Event): Promise<SettlementResul
 
   let totalAmount = 0;
 
-  // 支払いを処理
   for (const payment of event.payments) {
     totalAmount += payment.amount;
 
-    // 支払者のMemberIdを取得
     const payerMemberId = userIdToMemberIdMap.get(payment.payerId);
     if (payerMemberId) {
-      const payerBalance = balanceMap.get(payerMemberId);
-      if (payerBalance) {
-        payerBalance.paid += payment.amount;
-      }
+      const b = balanceMap.get(payerMemberId);
+      if (b) b.paid += payment.amount;
     }
 
     if (payment.isTransport) {
-      // 交通費: Shapley値で分配（バイクの人は自分の支払い分のみ）
-      // バイクの人の交通費支払いは自分自身への負担
       if (payerMemberId && bikeMemberIds.has(payerMemberId)) {
-        const balance = balanceMap.get(payerMemberId);
-        if (balance) {
-          balance.owed += payment.amount;
-        }
+        const b = balanceMap.get(payerMemberId);
+        if (b) b.owed += payment.amount;
       }
-      // 車に乗る人の交通費はShapley値で後で分配
     } else {
-      // 交通費以外: 受益者で均等割り
-      const beneficiaryCount = payment.beneficiaries.length;
-      if (beneficiaryCount > 0) {
-        const amountPerPerson = payment.amount / beneficiaryCount;
-        for (const beneficiary of payment.beneficiaries) {
-          const beneficiaryBalance = balanceMap.get(beneficiary.memberId);
-          if (beneficiaryBalance) {
-            beneficiaryBalance.owed += amountPerPerson;
-          }
+      const count = payment.beneficiaries.length;
+      if (count > 0) {
+        const per = payment.amount / count;
+        for (const ben of payment.beneficiaries) {
+          const b = balanceMap.get(ben.memberId);
+          if (b) b.owed += per;
         }
       }
     }
   }
 
-  // 7. 車に乗る人にShapley値による交通費負担を追加
-  // Shapley値は各プレイヤーの公平な負担額を表す
-  // 効率性（Efficiency）により、Shapley値の合計は自動的に v(N) = 交通費と等しくなる
-  for (const [memberId, shapleyValue] of shapleyValues) {
-    const balance = balanceMap.get(memberId);
-    if (balance) {
-      balance.owed += shapleyValue;
-    }
+  for (const [memberId, sv] of shapleyValues) {
+    const b = balanceMap.get(memberId);
+    if (b) b.owed += sv;
   }
 
-  // 8. 残高を計算
   const balances: MemberBalance[] = [];
   for (const [memberId, data] of balanceMap) {
     balances.push({
@@ -388,24 +438,20 @@ export async function calculateSettlement(event: Event): Promise<SettlementResul
       balance: Math.round(data.paid - data.owed),
     });
   }
-
-  // 残高でソート（受取額が多い順）
   balances.sort((a, b) => b.balance - a.balance);
 
-  // 9. Shapley値の結果を整形
   const shapleyResults: ShapleyValue[] = [];
-  for (const [memberId, shapleyValue] of shapleyValues) {
+  for (const [memberId, sv] of shapleyValues) {
     const member = memberMap.get(memberId);
     if (member) {
       shapleyResults.push({
         memberId,
         memberName: getMemberDisplayName(member),
-        value: Math.round(shapleyValue),
+        value: Math.round(sv),
       });
     }
   }
 
-  // 10. warikanで清算リストを計算
   const transfers = calculateTransfers(balances);
 
   return {
@@ -414,12 +460,10 @@ export async function calculateSettlement(event: Event): Promise<SettlementResul
     shapleyValues: shapleyResults,
     totalAmount,
     transportCost,
+    missingTollCoalitions,
   };
 }
 
-/**
- * 貪欲法で清算リストを計算
- */
 function calculateTransfers(balances: MemberBalance[]): Transfer[] {
   const transfers: Transfer[] = [];
   const creditors = balances.filter((b) => b.balance > 0).map((b) => ({ ...b }));
@@ -434,17 +478,10 @@ function calculateTransfers(balances: MemberBalance[]): Transfer[] {
       const amount = Math.min(remaining, creditor.balance);
       if (amount > 0) {
         transfers.push({
-          from: {
-            memberId: debtor.memberId,
-            memberName: debtor.memberName,
-          },
-          to: {
-            memberId: creditor.memberId,
-            memberName: creditor.memberName,
-          },
+          from: { memberId: debtor.memberId, memberName: debtor.memberName },
+          to: { memberId: creditor.memberId, memberName: creditor.memberName },
           amount: Math.round(amount),
         });
-
         remaining -= amount;
         creditor.balance -= amount;
       }
@@ -469,11 +506,7 @@ interface SimpleMember {
   id: string;
   userId: string;
   nickname: string | null;
-  user: {
-    id: string;
-    name: string | null;
-    email: string;
-  };
+  user: { id: string; name: string | null; email: string };
 }
 
 export interface SimpleSettlementResult {
@@ -482,9 +515,6 @@ export interface SimpleSettlementResult {
   totalAmount: number;
 }
 
-/**
- * シンプルな清算計算（Shapley値なし、均等割りのみ）
- */
 export function calculateSimpleSettlement(
   payments: SimplePayment[],
   members: SimpleMember[]
@@ -518,20 +548,16 @@ export function calculateSimpleSettlement(
 
     const payerMemberId = userIdToMemberIdMap.get(payment.payerId);
     if (payerMemberId) {
-      const payerBalance = balanceMap.get(payerMemberId);
-      if (payerBalance) {
-        payerBalance.paid += payment.amount;
-      }
+      const b = balanceMap.get(payerMemberId);
+      if (b) b.paid += payment.amount;
     }
 
-    const beneficiaryCount = payment.beneficiaries.length;
-    if (beneficiaryCount > 0) {
-      const amountPerPerson = payment.amount / beneficiaryCount;
-      for (const beneficiary of payment.beneficiaries) {
-        const beneficiaryBalance = balanceMap.get(beneficiary.memberId);
-        if (beneficiaryBalance) {
-          beneficiaryBalance.owed += amountPerPerson;
-        }
+    const count = payment.beneficiaries.length;
+    if (count > 0) {
+      const per = payment.amount / count;
+      for (const ben of payment.beneficiaries) {
+        const b = balanceMap.get(ben.memberId);
+        if (b) b.owed += per;
       }
     }
   }
@@ -547,14 +573,7 @@ export function calculateSimpleSettlement(
       balance: Math.round(data.paid - data.owed),
     });
   }
-
   balances.sort((a, b) => b.balance - a.balance);
 
-  const transfers = calculateTransfers(balances);
-
-  return {
-    balances,
-    transfers,
-    totalAmount,
-  };
+  return { balances, transfers: calculateTransfers(balances), totalAmount };
 }

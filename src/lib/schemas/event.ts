@@ -18,7 +18,11 @@ export const updateEventSchema = z
     startDate: z.coerce.date(),
     endDate: z.coerce.date(),
     gasPricePerLiter: z.number().int().min(1).max(500).default(170),
-    destinationId: z.string().uuid().nullable().optional(), // 目的地
+    destinationId: z.string().uuid().nullable().optional(),
+    outboundDate: z.coerce.date().nullable().optional(),
+    returnDate: z.coerce.date().nullable().optional(),
+    checkinTime: z.number().int().min(0).max(1439).nullable().optional(),
+    checkoutTime: z.number().int().min(0).max(1439).nullable().optional(),
   })
   .refine((data) => data.endDate >= data.startDate, {
     message: "終了日は開始日以降にしてください",

@@ -71,6 +71,13 @@ export function EventSettings({
     return date.toISOString().split("T")[0];
   };
 
+  const minutesToTime = (minutes: number | null): string => {
+    if (minutes === null || minutes === undefined) return "";
+    const h = Math.floor(minutes / 60).toString().padStart(2, "0");
+    const m = (minutes % 60).toString().padStart(2, "0");
+    return `${h}:${m}`;
+  };
+
   return (
     <div className="flex gap-2">
       {/* 編集ダイアログ */}
@@ -118,6 +125,62 @@ export function EventSettings({
                 />
                 {state.error?.endDate && (
                   <p className="text-sm text-red-500">{state.error.endDate[0]}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="outboundDate">往路日付</Label>
+                <Input
+                  id="outboundDate"
+                  name="outboundDate"
+                  type="date"
+                  defaultValue={event.outboundDate ? formatDate(event.outboundDate) : ""}
+                />
+                {state.error?.outboundDate && (
+                  <p className="text-sm text-red-500">{state.error.outboundDate[0]}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="returnDate">復路日付</Label>
+                <Input
+                  id="returnDate"
+                  name="returnDate"
+                  type="date"
+                  defaultValue={event.returnDate ? formatDate(event.returnDate) : ""}
+                />
+                {state.error?.returnDate && (
+                  <p className="text-sm text-red-500">{state.error.returnDate[0]}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="checkinTime">チェックイン時刻</Label>
+                <Input
+                  id="checkinTime"
+                  name="checkinTime"
+                  type="time"
+                  defaultValue={minutesToTime(event.checkinTime)}
+                />
+                <p className="text-muted-foreground text-xs">往路の到着目標時刻（高速料金の時間帯計算に使用）</p>
+                {state.error?.checkinTime && (
+                  <p className="text-sm text-red-500">{state.error.checkinTime[0]}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="checkoutTime">チェックアウト時刻</Label>
+                <Input
+                  id="checkoutTime"
+                  name="checkoutTime"
+                  type="time"
+                  defaultValue={minutesToTime(event.checkoutTime)}
+                />
+                <p className="text-muted-foreground text-xs">復路の出発目標時刻（高速料金の時間帯計算に使用）</p>
+                {state.error?.checkoutTime && (
+                  <p className="text-sm text-red-500">{state.error.checkoutTime[0]}</p>
                 )}
               </div>
             </div>
